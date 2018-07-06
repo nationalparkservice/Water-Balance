@@ -39,7 +39,7 @@ pptDir = r'E:\SWB\GRSA\PRISM_2000_2016\PPT\Resampled'        ##Directory with th
 septSnowPack = r'D:\ROMN\working\WaterBalance\GRSA\GIS\Sept_SnowPack_AllZero.tif'  ##Raster with default September Snow Pack for first year of processing - assumption is no snowpack at end of water year
 
 #Penmon-Monteith ET varibales (Daymet- NetCDF)
-tmaxDir = r''       ##Directory with the tmax variables
+tmaxDir = r'E:\Daymet\GRSA\tmax'       ##Directory with the tmax variables
 tminDir = r''       ##Directory with the tmin variables
 vpDir = r''         ##Direcotry with the vapour pressure variables
 sRad = r''          ##Direcotry with the Solar Radiation variables
@@ -51,6 +51,7 @@ rasterHeatLoad = "N/A"       ##Switch("Dir Path"|"N/A") Optinal variable to defi
 latitude = r'D:\ROMN\working\WaterBalance\GRSA\GIS\Latitude_GRSA.tif' ##Raster with Latitude values (GCS) for the AOA (Not used if Daymet Daylegnth is being used, Match cell size and snap to input climatic variables.
 aspectRas = r'D:\ROMN\working\WaterBalance\GRSA\GIS\aspect_albers_GRSA_10km.tif'#Aspect Raster
 slopeRas = r'D:\ROMN\working\WaterBalance\GRSA\GIS\slope_albers_GRSA_10km.tif' #Slope Raster
+elevation = r'D:\ROMN\working\WaterBalance\GRSA\GIS\dem_albers_GRSA_10km.tif' #Dem Raster
 
 soilAWS = r'D:\ROMN\working\WaterBalance\GRSA\GIS\GRSA_10km_AWS_0_150cm_Infill_100mm.tif'   ##Available water supply (mm) raster from gSSURGO data to a define soil depth (e.g. 0-150 cm, etc.), Null values have been infilled with a near Mean AWS value of 125 mm.
 percAWSInitial = 10   ##The percent (0-100%)of AWS by soil to be used in the initial previous month (September) calculation of the soil water balance.
@@ -111,6 +112,10 @@ def timeFun():          #Function to Grab Time
 
 def main():
     try:
+
+##        testFile = r'D:\ROMN\working\WaterBalance\GRSA\workspace\SetNull_tif1.tif'
+##        testFile_np = raster2array(testFile)
+
 
         yearRange = range(startYear, endYear + 1)
 
@@ -1820,7 +1825,7 @@ def Penman_topLeft(monthlyRadiation, year, month):
 
 
 
-        Rnl_np = calc_Rnl(tmax,tmin,Ea,Rs = 'null',Rso = 'null')
+        Rnl_np = calc_Rnl(tmax,tmin,Ea,Rs_np, Ra_NP, year, month)
 
 
 
@@ -1979,10 +1984,10 @@ def calc_avgTemp(tmin, tmax):
     del addTminTmax_NP
     del divide_2_NP
 
-    return = avgTemp
+    return avgTemp
 
 
-def calc_Ra(inverse_rel_distance, sunset_hour_angle_NP, latitude, solar_declination):
+def calc_Ra(inverse_rel_distance, sunset_hour_angle_NP, latitude, solar_declination): #Completed 20180706
     #Ra = extra-terrestrial radiation in MJ/m2/day. Equation 21 of Ch3 FAO doc.
     # Latitude (j) in radians. Positive for northern hemisphere and negative for southern hemisphere.
     # Sunset hour angle (Ws) in radians. Solar declination (d) in radians.
@@ -2083,7 +2088,7 @@ def calc_Ra(inverse_rel_distance, sunset_hour_angle_NP, latitude, solar_declinat
 
     return Ra_NP
 
-def calc_Rnl(tmax,tmin,Ea,Rs_np, Rso = 'null'): #
+def calc_Rnl(tmax,tmin,Ea,Rs_np, Ra_NP, year, month): #
     #Rnl = net long-wave radiation in MJ/m2/day. Equation 39 Ch3 FAO doc.
     #Ea = actual vapor pressure (Kpa). Rs = Solar radiation in MJ/m2/day as calc by equation 35.
     #Rso = clear sky radiation in MJ/m2/day as calculated by equation 37.
@@ -2100,22 +2105,103 @@ def calc_Rnl(tmax,tmin,Ea,Rs_np, Rso = 'null'): #
 ##    Rnl = left_bracket_term * middle_term * right_term
 ##    return Rnl
 
-    #Create the Rs Raster if null Set to 1.
+
+    #Create the Rs Raster if null (i.e. -3.40282347e+38,k KRS can never get nan function to work?
+    Rs_np_Null_1 = np.where(Rs_np<-1000000, 1, Rs_np)
+    del Rs_np
+
+    Rso_np = calc_Rso(elevation,Ra_np)
+    #Create the Rso Raster if null (i.e. -3.40282347e+38,k KRS can never get nan function to work?
+    Rso_np_Null_1 = np.where(Rso_np<-1000000, 1, Rso_np)
+    del Rso_np
 
 
-    relative_shortwave_radiation = Rs/Rso
-    if relative_shortwave_radiation > 1 : relative_shortwave_radiation = 1
-    tmax = tmax + 273.16;tmin = tmin + 273.16 # Convert to degrees Kelvin
-    tmax = tmax**4;tmin=tmin**4
-    left_bracket_term = (tmax+tmin)/2;left_bracket_term = left_bracket_term * .000000004903 # Stefan-Boltzmann constant
+    relative_shortwave_radiation_np = np.division(Rs_np_Null_1, Rso_np_Null_1)  #Rs/Rs0
+    del Rs_np_Null_1
+    del Rso_np_Null_1
+
+
+    #Set Relative Shortwave Radiation to 1 if > 1.
+    relative_shortwave_radiation_np[relative_shortwave_radiation_np > 1] = 1
+
+
+    'Get the Correct Monthly Tmax dataset'
+    out_Path = funPathName_dataset(tmax, "\\*MonthlyAvg_", year, month, "*.nc")
+    datasetGlob = glob.glob(out_Path)
+    'Create the Numpy Array'
+    tmax_np = raster2array(datasetGlob[0])
+
+    #Create a Kelvin NP array
+    kelvin_np = raster2array(datasetGlob[0])
+    kelvin_np[kelvin_np > -1000000] = 273.16
+
+
+    #Tmax in Kelvin
+    tmax_kelvin_np = np.add(tmax_np, kelvin_np)
+    del tmax_np
+
+    #Tmin in Kelvin
+    #Directory Path and wildcard syntx for tmin dataset
+    out_Path = funPathName_dataset(tmin, "\\*MonthlyAvg_", year, month, "*.nc")
+    datasetGlob = glob.glob(out_Path)
+    'Create the Numpy Array'
+    tmin_np = raster2array(datasetGlob[0])
+
+
+    #Tmin in Kelvin
+    tmin_kelvin_np = np.add(tmin_np, kelvin_np)
+    del kelvin_np
+    del tmin_np
+
+
+    #Tmax Kelvin raised to the power of 4
+    tmax_power4_np = np.power(tmax_kelvin_np, 4)
+    del tmax_kelvin_np
+     #Tmin Kelvin raised to the power of 4
+    tmin_power4_np = np.power(tmin_kelvin_np, 4)
+    del tmin_kelvin_np
+
+    left_bracket_term_np = np.add(tmax_power4_np,tmin_power4_np)
+
+    np_Val2 = raster2array(datasetGlob[0])
+    np_Val2[np_Val2 > -1000000] = 2.0
+
+
+    left_bracket_term_div2_np = np.division(left_bracket_term_np, np_Val2)
+    del left_bracket_term_np
+    del np_Val2
+
+    #Create the Stefan-Boltzmann array
+    stefan_Boltz_np = raster2array(datasetGlob[0])
+    stefan_Boltz_np[stefan_Boltz_np > -1000000] = 0.000000004903
+
+
+    left_bracket_termFinal = np.multiply(left_bracket_term_div2_np, stefan_Boltz_np) # Stefan-Boltzmann constant
+    del left_bracket_term_div2_np
+    del stefan_Boltz_np
+
+    ################################  Stopped here 20180706 - 5:00 pm - KRS
+    ################################
+    ################################
+
+
+
     middle_term = 0.34 - (.14 * numpy.sqrt(Ea))
     right_term = (1.35*relative_shortwave_radiation) - 0.35
     Rnl = left_bracket_term * middle_term * right_term
     return Rnl
 
+#Function define the dataset Path for the variable of interest
+#inDir - Directory with the variable datasets
+#prefix - wild card syntax for file name prefix
+#year - year being processed
+#month - month being processed
+#suffix - wild card syntax for file name suffix (e.g "*.nc", "*.tif"
+def funPathName_dataset(inDir, prefix, year, month, suffix)
 
+    outPath = inDir + prfix + str(year) + month + suffix
 
-
+    return outPath
 
 
 def calc_Rs(Ra_NP, year, month, N_np): # Equation 35 - Completed 20180706
@@ -2132,8 +2218,9 @@ def calc_Rs(Ra_NP, year, month, N_np): # Equation 35 - Completed 20180706
 ##    return Rs
 
     dirPath_Name = dayl + "\\*MonthlyAvg_" + str(year) + month + "*.nc"  'Directory Path and wildcard syntx for the Daylength NC File'
-    daylength_NC = glob.glob(E:\Daymet\GRSA\dayl\*MonthlyAvg_)
-    n_np = netCDF4.Dataset(daylength_NC)
+    daylength_NC = glob.glob(dirPath_Name)
+
+    n_np = raster2array(daylength_NC[0])
 
     #Create float type array of the Daylength raster
     n_np_float = numpy.float(n_np)
@@ -2148,12 +2235,12 @@ def calc_Rs(Ra_NP, year, month, N_np): # Equation 35 - Completed 20180706
     b = 0.5 # a + b = fraction of extra-terrestrial radiation reaching earth on clear days.
 
 
-    'Create Array with the a cloudy day component
+    #Create Array with the a cloudy day component
     a_np = netCDF4.Dataset(daylength_NC)
     a_np[a_np > -999] = a
 
 
-    'Create Array with the b component
+    #Create Array with the b component
     b_np = netCDF4.Dataset(daylength_NC)
     b_np[b_np > -999] = b
 
@@ -2170,18 +2257,39 @@ def calc_Rs(Ra_NP, year, month, N_np): # Equation 35 - Completed 20180706
     del leftBracket_np
 
 
-    'Final Rs array'
+    #Final Rs array'
     Rs_np = numpy.Multiply(fullBracket_np, Ra_NP)
     return Rs_np
 
-def calc_Rso(elevation,Ra): #CHECKS OK
+def calc_Rso(elevation,Ra_np): #Completed 20180706
     # Equation 37 in ch3 of FAO doc.
     # Ra as calc from equation 21.
     # Elevation in meters
-    elevation = float(elevation)
-    correction_term = (.00002 * elevation) + .75
-    Rso = Ra * correction_term
-    return Rso
+    #elevation = float(elevation)
+    #correction_term = (.00002 * elevation) + .75
+    #Rso = Ra * correction_term
+    #return Rso
+
+    elevation_np = raster2array(elevation)
+
+    np_pt00002 = raster2array(elevation)
+    np_pt00002[np_pt00002 > -100000] = 0.00002
+
+    cor_term_left_np = np.multiply(elevation_np, np_pt00002)
+    del elevation_np
+    del np_pt00002
+
+    np_pt75 = raster2array(elevation)
+    np_pt75[np_pt75 > -100000] = 0.75
+
+
+    cor_term_Full_np = np.add(cor_term_left_np, np_pt75)
+    del cor_term_left_np
+    del np_pt75
+
+    Rso_np = np.multiply(Ra_np, cor_term_Full_np)
+
+    return Rso_np
 
 # Calc Solar Declination for mid monthly value used in Penman ET Calculation
 def calc_solar_declination_Penman(month):
