@@ -1792,6 +1792,38 @@ def Penman_Montieth(year, month):
         traceback.print_exc(file=sys.stdout)
         sys.exit()
 
+#Function Calculated the Mean Temperature Array using the TMIN and TMAX inputs
+def calc_TMean(year, month)
+'Get the Correct Monthly Tmax dataset'
+        out_Path = funPathName_dataset(tmaxDir, "\\*MonthlyAvg_", year, month, "*.nc")
+        datasetGlob = glob.glob(out_Path)
+        'Create the Numpy Array'
+        tmax_np = raster2array(datasetGlob[0])
+
+
+        'Get the Correct Monthly Tmin dataset'
+        out_Path = funPathName_dataset(tminDir, "\\*MonthlyAvg_", year, month, "*.nc")
+        datasetGlob = glob.glob(out_Path)
+        'Create the Numpy Array'
+        tmin_np = raster2array(datasetGlob[0])
+
+        #Add Tmax and Tmin
+        addMaxMin_NP = np.add(tmax_np, tmin_np)
+        del tmax_np
+        del tmin_np
+
+        #Array value 2
+        np2 = raster2array(datasetGlob[0])
+        #Create Raster with value 0.408 every where
+        np2[np2 > -999] = 2.0
+
+
+        #Derive the Mean Temp Array
+        meanTemp_NP = np.divide(addMaxMin_NP, np2)
+        del np2
+        del addMaxMin_NP
+
+        return meanTemp_NP
 
 
 #Top Left Term of FAO Penman-Monteith (0.408 Delta(Rn-G)
@@ -1799,7 +1831,9 @@ def Penman_topLeft(monthlyRadiation, year, month):
 
     try:
 
-        pt408 = raster2array(monthlyTempMean[0])
+
+
+        pt408 = raster2array(datasetGlob[0])
         #Create Raster with value 0.408 every where
         pt408[pt408 > -999] = 0.408
 
@@ -2181,16 +2215,68 @@ def calc_Rnl(tmax,tmin,Ea,Rs_np, Ra_NP, year, month): #
     del left_bracket_term_div2_np
     del stefan_Boltz_np
 
-    ################################  Stopped here 20180706 - 5:00 pm - KRS
+     #Create a 0.34 Array
+    p34_np = raster2array(datasetGlob[0])
+    p34_np[p34_np > -1000000] = 0.34
+
+
+    #Create a 0.14 Array
+    p14_np = raster2array(datasetGlob[0])
+    p14_np[p14_np > -1000000] = 0.14
+
+
+    #Calculate the vapour pressure array in unit Kpa.  Daymet native vp data set is in Pa.
+    out_Kpa_NP = calc_vp_kpa(month, year)
+
+
+    #Sqroot the VP kpa array
+    vp_kpa_sqrt_NP = numpy.sqrt(out_Kpa_NP)
+    del out_Kpa_NP
+
+    #(.14 * numpy.sqrt(Ea))
+    middleRight_NP = np.multply(p14_np, vp_kpa_sqrt_NP)
+
+    #0.34 - (.14 * numpy.sqrt(Ea))
+    middleTerm_NP = np.subtract(p34_np, middleRight_NP)
+
+
+    #Create a 1.35 Array
+    p1pt35_np = raster2array(datasetGlob[0])
+    p1pt35_np[p1pt35_np > -1000000] = 1.35
+
+
+    ################################  Stopped here 20180712 - 5:00 pm - KRS  - Must Convert the Daymat srad from W/m2 to MJ/m2
+    ################################ See url https://daac.ornl.gov/DAYMET/guides/Daymet_mosaics.html  for formula to convert Daily total radion (MJ/m2/day)
+    ################################ needed for the relative_shortwave_radiation value.
     ################################
-    ################################
 
 
+    relative_shortwave_radiation needs to be converted to MJ/m2/day
 
-    middle_term = 0.34 - (.14 * numpy.sqrt(Ea))
+
     right_term = (1.35*relative_shortwave_radiation) - 0.35
     Rnl = left_bracket_term * middle_term * right_term
     return Rnl
+
+#Function calculated the Vapour Pressure from Daymet to unit Kpa
+def calc_vp_kpa(month, year)
+
+    dirPath_Name = vpDir + "\\*MonthlyAvg_" + str(year) + month + "*.nc"  'Directory Path and wildcard syntx for the Vapour Pressure NC File'
+    vp_NC = glob.glob(dirPath_Name)
+
+    vp_np = raster2array(vp_NC[0])
+
+    #Create a 1000.0 Array
+    Array_1000_np = raster2array(vp_NC[0])
+    Array_1000_np[ Array_1000_np > -1000000] = 1000
+
+
+    #Derive the Vp array in unit Kpa
+    vp_kpa_np = np.divide(vp_np, Array_1000_np)
+    del vp_np
+    del Array_1000_np
+
+return vp_kpa_np
 
 #Function define the dataset Path for the variable of interest
 #inDir - Directory with the variable datasets
@@ -2348,6 +2434,58 @@ def calc_inverse_rel_distance(month): #Using the Mid Month Day value due to mont
     bracket_term = ((2*pi)/365) * doy
     retval = (.033 * numpy.cos(bracket_term)) + 1
     return retval #radians
+
+def calc_Ea_with_humidity_data(tmax, tmin, RHmean):#Function is only used if their is humidity data - Daymet doesn't have humidity data- Not being used.
+##    #Equation 19 of chap3 in FAO doc
+##    #RHmean must be a %. It is reduced to decimal below.
+##    RHmean = float(RHmean)
+##    E_tmax = calc_saturation_vapor_pressure(tmax)
+##    E_tmin = calc_saturation_vapor_pressure(tmin)
+##    bracket_term = (E_tmax + E_tmin)/2
+##    left_term = RHmean / 100
+##    Ea = left_term * bracket_term
+##    return Ea
+
+    out_Path = funPathName_dataset(tmax, "\\*MonthlyAvg_", year, month, "*.nc")
+    datasetGlob = glob.glob(out_Path)
+    'Create the Numpy Array'
+    tmax_np = raster2array(datasetGlob[0])
+    E_tmax = satVapourPressure(tmax_np, month, year)
+
+
+    out_Path = funPathName_dataset(tmin, "\\*MonthlyAvg_", year, month, "*.nc")
+    datasetGlob = glob.glob(out_Path)
+    'Create the Numpy Array'
+    tmin_np = raster2array(datasetGlob[0])
+    E_tmin = satVapourPressure(tmin, month, year)
+
+    #(E_tmax + E_tmin)
+    add_Etmin_Etmax_NP = np.add(E_tmax, E_tmin)
+    del E_tmax
+    del E_tmin
+
+    #Create array with value 2.0
+    np2 = raster2array(datasetGlob[0])
+    np2[np2 > -1000000] = 2.0
+
+
+    #bracket_term = (E_tmax + E_tmin)/2
+    braket_term_NP = np.divide(add_Etmin_Etmax_NP,np2)
+    del add_Etmin_Etmax_NP
+    del np2
+
+    ################## - Functionality for deriving Ea with humidty data has not been developed KRS 20180712
+    RHmean = float(RHmean)
+
+
+    left_term = RHmean / 100
+    Ea = left_term * bracket_term
+    return Ea
+
+
+
+
+
 
 if __name__ == '__main__':
 
