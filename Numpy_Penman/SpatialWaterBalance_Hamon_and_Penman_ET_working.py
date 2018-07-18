@@ -43,7 +43,7 @@ septSnowPack = r'D:\ROMN\working\WaterBalance\GRSA\GIS\Sept_SnowPack_AllZero.tif
 tmaxDir = r'E:\Daymet\GRSA\tmax'       ##Directory with the tmax variables
 tminDir = r''       ##Directory with the tmin variables
 vpDir = r''         ##Direcotry with the vapour pressure variables
-sRad = r''          ##Direcotry with the Solar Radiation variables
+sRad = r''          ##Direcotry with the Solar Radiation variables (note Daymet sRad unit is W/m2)
 dayl = r'E:\Daymet\GRSA\dayl'          ##Directory with the Day Length variables
 
 heatLoadIndex = "Yes"       ##Switch ("Yes"|"No") defining if Heat Load Index (Topographic Factors Slope and Aspect Included in Potential Evopotranspiration Calculation (See Eq 16 Dilts et. al. 2015 Biogeography)
@@ -1859,10 +1859,12 @@ def Penman_topLeft(monthlyRadiation, year, month):
         Rs_np =CalcRs(Ra_NP, year, month, N_np)
 
 
-
+        #Completed 2018/7/18
         Rnl_np = calc_Rnl(tmax,tmin,Ea,Rs_np, Ra_NP, year, month)
 
-
+        ##############################
+        #Stopped Here 2018/07/18 - KRS
+        ##############################
 
         #Derived Incoming Net Shortwave Radiation
         out_Rns =CalcRn(Rnl, Rs_np)
@@ -2239,24 +2241,74 @@ def calc_Rnl(tmax,tmin,Ea,Rs_np, Ra_NP, year, month): #
     #0.34 - (.14 * numpy.sqrt(Ea))
     middleTerm_NP = np.subtract(p34_np, middleRight_NP)
 
+    # Convert sRad to MJ/m2/day -  See url https://daac.ornl.gov/DAYMET/guides/Daymet_mosaics.html  for formula to convert Daily total radion (MJ/m2/day)
+    out_MJM2Day = calc_ShortWaveRad_MJM2Day(month, year)
+
 
     #Create a 1.35 Array
     p1pt35_np = raster2array(datasetGlob[0])
     p1pt35_np[p1pt35_np > -1000000] = 1.35
 
+    #Right Term Right Side (1.35 * sRad (MJ/M2/day))
+    rightTerm_Right_np = np.multiply(p1pt35_np, out_MJM2Day)
+    del out_MJM2Day
+    del p1pt35_np
 
-    ################################  Stopped here 20180712 - 5:00 pm - KRS  - Must Convert the Daymat srad from W/m2 to MJ/m2
-    ################################ See url https://daac.ornl.gov/DAYMET/guides/Daymet_mosaics.html  for formula to convert Daily total radion (MJ/m2/day)
-    ################################ needed for the relative_shortwave_radiation value.
-    ################################
+    #Create a 0.35 Array
+    pt35_np = raster2array(datasetGlob[0])
+    pt35_np[pt35_np > -1000000] = 0.35
 
 
-    relative_shortwave_radiation needs to be converted to MJ/m2/day
+    #Full Right Term (1.35*relative_shortwave_radiation) - 0.35
+    rightTermNP = np.subtract(rightTerm_Right_np, pt35_np)
+    del rightTerm_Right_np
+    del pt35_np
+
+    #Multple the Left Bracket, Middle Term and Right Term
+    Rnl_Left_Middle_np = np.multiply(left_bracket_termFinal, middleTerm_NP)
+    del left_bracket_termFinal
+    del middleTerm_NP
+
+    #left_bracket_term * middle_term * right_term
+    Rnl_np = np.multiply(Rnl_Left_Middle_np, rightTermNP)
+    del Rnl_Left_Middle_np
+    del rightTermNP
+
+    return Rnl_np
+
+#Function calculates the Daily total radiation (MJ/m2/day) using the following equation: ((srad (W/m2) * dayl (s/day)) / 1,000,000)
+def calc_ShortWaveRad_MJM2Day(month, year)
+    dirPath_Name = sRad + "\\*MonthlyAvg_" + str(year) + month + "*.nc"  'Directory Path and wildcard syntx for the srad NC File'
+    srad_NC = glob.glob(dirPath_Name)
+
+    #Create the srad array
+    srad_np = raster2array(srad_NC[0])
 
 
-    right_term = (1.35*relative_shortwave_radiation) - 0.35
-    Rnl = left_bracket_term * middle_term * right_term
-    return Rnl
+    dirPath_Name = dayl + "\\*MonthlyAvg_" + str(year) + month + "*.nc"  'Directory Path and wildcard syntx for the dayl NC File'
+    dayl_NC = glob.glob(dirPath_Name)
+
+    #Create the srad array
+    dayl_np = raster2array(dayl_NC[0])
+
+    #Create an 1,000,000 Array
+    Array_1Mill_np = raster2array(vp_NC[0])
+    Array_1Mill_np[Array_1000_np > -1000000] = 1000000.0
+
+    #srad * dayl
+    srad_dayl_np = np.multiply(srad_np, dayl_np)
+    del srad_np
+    del dayl_np
+
+    #final calc
+    shortWaveRad_MJM2Day_np = np.divide(srad_dayl_np, Array_1Mill_np)
+    del Array_1Mill_np
+    del srad_dayl_np
+
+
+    print "Successfully calculated the Short Wave Radiation Conversion to 'MJ/m2/day' - function 'calc_ShortWaveRad_MJM2Day'
+    return shortWaveRad_MJM2Day_np
+
 
 #Function calculated the Vapour Pressure from Daymet to unit Kpa
 def calc_vp_kpa(month, year)
@@ -2276,7 +2328,7 @@ def calc_vp_kpa(month, year)
     del vp_np
     del Array_1000_np
 
-return vp_kpa_np
+return xxx
 
 #Function define the dataset Path for the variable of interest
 #inDir - Directory with the variable datasets
