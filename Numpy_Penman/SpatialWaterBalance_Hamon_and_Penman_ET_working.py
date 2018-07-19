@@ -1831,8 +1831,6 @@ def Penman_topLeft(monthlyRadiation, year, month):
 
     try:
 
-
-
         pt408 = raster2array(datasetGlob[0])
         #Create Raster with value 0.408 every where
         pt408[pt408 > -999] = 0.408
@@ -1855,26 +1853,26 @@ def Penman_topLeft(monthlyRadiation, year, month):
         #Derive N = Maximum Daylength - Completed 2018/7/6
         N_np = calc_daylength(sunset_hour_angle_NP)
 
-        #Derive Rs (MJ/m2/day) - Completed 2018/7/6
-        Rs_np =CalcRs(Ra_NP, year, month, N_np)
+        #############################
+        #Derive Rs (MJ/m2/day) - Completed 2018/7/6 - I believe this is the equivalent of the Daymet sRad data product so calculaton is not necessary - KRS
+        #Rs_np =CalcRs(Ra_NP, year, month, N_np)
+
+        #Function to convert the native Daymet sRad (W/m2) to (MJ/m2/day)
+        Rs_np = calc_sRad_MJM2Day(month, year)
+        ##############################
 
 
-        #Completed 2018/7/18
+        #Derive Rnl: net long-wave radiation in MJ/m2/day - Completed 2018/7/18
         Rnl_np = calc_Rnl(tmax,tmin,Ea,Rs_np, Ra_NP, year, month)
 
+
+
+        #Derive Incoming Net Shortwave Radiation - Completed 20180719
+        Rn_np =CalcRn(Rnl_np, Rs_np)
+
         ##############################
-        #Stopped Here 2018/07/18 - KRS
+        #Stopped Here 2018/07/19 - KRS
         ##############################
-
-        #Derived Incoming Net Shortwave Radiation
-        out_Rns =CalcRn(Rnl, Rs_np)
-
-
-
-        #Derive (Rn) Net Radiation
-         # Equation 40 of ch3 FAO doc.
-         # Using estimate of Rns (Incoming Net Shortwave Radiation from equation 38:(Rns) = (1-a)*Rs. a is default set to 0.25 unless a regression has been done.
-        out_Rn= CalcRn(Rnl,Rs)
 
 
 
@@ -2125,7 +2123,8 @@ def calc_Ra(inverse_rel_distance, sunset_hour_angle_NP, latitude, solar_declinat
 
     return Ra_NP
 
-def calc_Rnl(tmax,tmin,Ea,Rs_np, Ra_NP, year, month): #
+    #Function to derive Rnl: net long-wave radiation
+def calc_Rnl(tmax,tmin,Ea,Rs_np,Ra_NP, year, month): #
     #Rnl = net long-wave radiation in MJ/m2/day. Equation 39 Ch3 FAO doc.
     #Ea = actual vapor pressure (Kpa). Rs = Solar radiation in MJ/m2/day as calc by equation 35.
     #Rso = clear sky radiation in MJ/m2/day as calculated by equation 37.
@@ -2143,17 +2142,19 @@ def calc_Rnl(tmax,tmin,Ea,Rs_np, Ra_NP, year, month): #
 ##    return Rnl
 
 
-    #Create the Rs Raster if null (i.e. -3.40282347e+38,k KRS can never get nan function to work?
+    #Create the Rs Raster if null (i.e. -3.40282347e+38, KRS can never get nan function to work?
     Rs_np_Null_1 = np.where(Rs_np<-1000000, 1, Rs_np)
     del Rs_np
 
+    #Calculate the Clear-sky solar radiation (Rso) - Even with daymat sRad I believe this still needs to be calculated. - KRS?
     Rso_np = calc_Rso(elevation,Ra_np)
+
     #Create the Rso Raster if null (i.e. -3.40282347e+38,k KRS can never get nan function to work?
     Rso_np_Null_1 = np.where(Rso_np<-1000000, 1, Rso_np)
     del Rso_np
 
-
-    relative_shortwave_radiation_np = np.division(Rs_np_Null_1, Rso_np_Null_1)  #Rs/Rs0
+    #Rs/Rs0
+    relative_shortwave_radiation_np = np.division(Rs_np_Null_1, Rso_np_Null_1)
     del Rs_np_Null_1
     del Rso_np_Null_1
 
@@ -2194,11 +2195,14 @@ def calc_Rnl(tmax,tmin,Ea,Rs_np, Ra_NP, year, month): #
     #Tmax Kelvin raised to the power of 4
     tmax_power4_np = np.power(tmax_kelvin_np, 4)
     del tmax_kelvin_np
-     #Tmin Kelvin raised to the power of 4
+
+    #Tmin Kelvin raised to the power of 4
     tmin_power4_np = np.power(tmin_kelvin_np, 4)
     del tmin_kelvin_np
 
-    left_bracket_term_np = np.add(tmax_power4_np,tmin_power4_np)
+    left_bracket_term_np = np.add(tmax_power4_np, tmin_power4_np)
+    del tmax_power4_np
+    del tmin_power4_np
 
     np_Val2 = raster2array(datasetGlob[0])
     np_Val2[np_Val2 > -1000000] = 2.0
@@ -2241,17 +2245,16 @@ def calc_Rnl(tmax,tmin,Ea,Rs_np, Ra_NP, year, month): #
     #0.34 - (.14 * numpy.sqrt(Ea))
     middleTerm_NP = np.subtract(p34_np, middleRight_NP)
 
-    # Convert sRad to MJ/m2/day -  See url https://daac.ornl.gov/DAYMET/guides/Daymet_mosaics.html  for formula to convert Daily total radion (MJ/m2/day)
-    out_MJM2Day = calc_ShortWaveRad_MJM2Day(month, year)
-
+    #Convert sRad to MJ/m2/day -  See url https://daac.ornl.gov/DAYMET/guides/Daymet_mosaics.html  for formula to convert Daily total radion (MJ/m2/day)
+    sRad_np = calc_sRad_MJM2Day(month, year)
 
     #Create a 1.35 Array
     p1pt35_np = raster2array(datasetGlob[0])
     p1pt35_np[p1pt35_np > -1000000] = 1.35
 
     #Right Term Right Side (1.35 * sRad (MJ/M2/day))
-    rightTerm_Right_np = np.multiply(p1pt35_np, out_MJM2Day)
-    del out_MJM2Day
+    rightTerm_Right_np = np.multiply(p1pt35_np, sRad_np)
+    del sRad_np
     del p1pt35_np
 
     #Create a 0.35 Array
@@ -2277,7 +2280,7 @@ def calc_Rnl(tmax,tmin,Ea,Rs_np, Ra_NP, year, month): #
     return Rnl_np
 
 #Function calculates the Daily total radiation (MJ/m2/day) using the following equation: ((srad (W/m2) * dayl (s/day)) / 1,000,000)
-def calc_ShortWaveRad_MJM2Day(month, year)
+def calc_sRad_MJM2Day(month, year)
     dirPath_Name = sRad + "\\*MonthlyAvg_" + str(year) + month + "*.nc"  'Directory Path and wildcard syntx for the srad NC File'
     srad_NC = glob.glob(dirPath_Name)
 
@@ -2307,7 +2310,7 @@ def calc_ShortWaveRad_MJM2Day(month, year)
 
 
     print "Successfully calculated the Short Wave Radiation Conversion to 'MJ/m2/day' - function 'calc_ShortWaveRad_MJM2Day'
-    return shortWaveRad_MJM2Day_np
+    return sRad_np
 
 
 #Function calculated the Vapour Pressure from Daymet to unit Kpa
@@ -2320,7 +2323,7 @@ def calc_vp_kpa(month, year)
 
     #Create a 1000.0 Array
     Array_1000_np = raster2array(vp_NC[0])
-    Array_1000_np[ Array_1000_np > -1000000] = 1000
+    Array_1000_np[ Array_1000_np > -1000000] = 1000.0
 
 
     #Derive the Vp array in unit Kpa
@@ -2328,7 +2331,7 @@ def calc_vp_kpa(month, year)
     del vp_np
     del Array_1000_np
 
-return xxx
+return vp_kpa_np
 
 #Function define the dataset Path for the variable of interest
 #inDir - Directory with the variable datasets
@@ -2343,7 +2346,33 @@ def funPathName_dataset(inDir, prefix, year, month, suffix)
     return outPath
 
 
-def calc_Rs(Ra_NP, year, month, N_np): # Equation 35 - Completed 20180706
+# Calculate the Net Radiation (Rn) - The net radiation (Rn) is the difference between the incoming net shortwave radiation (Rns)
+# and the outgoing net longwave radiation (Rnl):
+def calc_Rn(Rnl_np,Rs_np): #Completed 20180719
+    # Equation 40 of ch3 FAO doc.
+    # Using estimate of Rns from equation 38 :> Rns = (1-a)*Rs. a is default set to 0.25 unless a regression has been done.
+    #Rns = 0.75* Rs
+    #Rn = Rns - Rnl
+    #return Rn
+
+    #Create Array with 0.75
+    pt75_np = Rs_np
+    pt75_np[pt75_np > -1000000] = 0.75
+
+    #Rns = 0.75* Rs
+    Rns_np = np.multiply(pt75_np, Rs_np)
+    del pt75_np
+
+    #Rn = Rns - Rnl
+    Rn_np = np.subtract(Rns_np,Rnl_np)
+    del Rns_np
+    del Rnl_np
+
+    return Rn_np
+
+
+def calc_Rs(Ra_NP, year, month, N_np): # Equation 35 - Completed 20180706 - I believe this is the equivalent of the Daymet sRad data product so
+    # the calculation is not needed if using Daymet - KRS
     # Ra = extra-terrestrial radiation as calc by equation 21 in MJ/m2/day.
     # Rs = MJ/m2/day
     # n = actual duration of sunshine (hours)
@@ -2375,18 +2404,18 @@ def calc_Rs(Ra_NP, year, month, N_np): # Equation 35 - Completed 20180706
 
 
     #Create Array with the a cloudy day component
-    a_np = netCDF4.Dataset(daylength_NC)
+    a_np = raster2array(daylength_NC)
+
     a_np[a_np > -999] = a
 
 
     #Create Array with the b component
-    b_np = netCDF4.Dataset(daylength_NC)
+    b_np = raster2array(daylength_NC)
     b_np[b_np > -999] = b
 
     ratio_np = numpy.divide(n_np_float, N_np_float)
     del n_np_float
     del N_np_float
-
 
     leftBracket_np = Numpy.Multipy(ratio_np, b_np)
     del b_np
@@ -2395,11 +2424,14 @@ def calc_Rs(Ra_NP, year, month, N_np): # Equation 35 - Completed 20180706
     del a_np
     del leftBracket_np
 
-
     #Final Rs array'
     Rs_np = numpy.Multiply(fullBracket_np, Ra_NP)
+    del fullBracket_np
+    #del Ra_NP
+
     return Rs_np
 
+    #Clear-sky solar radiation (Rso)
 def calc_Rso(elevation,Ra_np): #Completed 20180706
     # Equation 37 in ch3 of FAO doc.
     # Ra as calc from equation 21.
