@@ -1782,7 +1782,7 @@ def Penman_Montieth(year, month):
         Penman_topLeft_np = Penman_topLeft(netRadiation, year, month)
 
         messageTime = timeFun()
-        print "Successfully finished function 'Penman_topLeft_NP' - " + " - " + messageTime
+        print "Successfully finished function 'Penman_topLeft' - " + " - " + messageTime
 
         ######################
         #Stopped Here 20180723 - KRS
@@ -1790,6 +1790,10 @@ def Penman_Montieth(year, month):
 
         #Top Middle Term of FAO Penman-Monteith (900/corrected_tavg)*gamma
         Penman_topMiddle_np = Penman_topMiddle(year, month)
+
+
+        messageTime = timeFun()
+        print "Successfully finished function 'Penman_topMiddle' - " + " - " + messageTime
 
 
 
