@@ -1779,10 +1779,17 @@ def Penman_Montieth(year, month):
 
 
         #Top Left Term of FAO Penman-Monteith (0.408 Delta(Rn-G))
-        outPenman_topLeft = Penman_topLeft(netRadiation, year, month)
+        Penman_topLeft_np = Penman_topLeft(netRadiation, year, month)
 
         messageTime = timeFun()
-        print "xxx - " + " - " + messageTime
+        print "Successfully finished function 'Penman_topLeft_NP' - " + " - " + messageTime
+
+        ######################
+        #Stopped Here 20180723 - KRS
+        ######################
+
+        #Top Middle Term of FAO Penman-Monteith (900/corrected_tavg)*gamma
+        Penman_topMiddle_np = Penman_topMiddle(year, month)
 
 
 
@@ -1791,6 +1798,115 @@ def Penman_Montieth(year, month):
         print "Error Penman_Montieth function - " + messageTime
         traceback.print_exc(file=sys.stdout)
         sys.exit()
+
+
+
+#Top Left Term of FAO Penman-Monteith (0.408 Delta(Rn-G) - Initial Development finished 2018/07/23 - KRS
+def Penman_topLeft(monthlyRadiation, year, month):
+
+    try:
+
+        #Derive Delta - Completed Feb 2018
+        out_Delta_np = Penman_Delta(year, month)
+
+        #Derive Inverse Relative Distance - Using the mid Month Day value - Completed 2018/7/6
+        inverse_rel_distance = calc_inverse_rel_distance(month)
+
+
+        #Derive sunset_hour_angle
+        sunset_hour_angle_NP = calc_sunset_hour_angle(latitude,solar_declination, month) #- Completed 2018/7/6
+
+
+        #Derive  Ra: extra-terrestrial radiation in MJ/m2/day. Equation 21 of Ch3 FAO doc. - Completed 2018/7/6
+        Ra_NP = calc_Ra(inverse_rel_distance,sunset_hour_angle_NP,latitude,solar_declination)
+
+        #Derive N = Maximum Daylength - Completed 2018/7/6
+        N_np = calc_daylength(sunset_hour_angle_NP)
+
+        #############################
+        #Derive Rs (MJ/m2/day) - Completed 2018/7/6 - I believe this is the equivalent of the Daymet sRad data product so calculaton is not necessary - KRS
+        #Rs_np =CalcRs(Ra_NP, year, month, N_np)
+
+        #Function to convert the native Daymet sRad (W/m2) to (MJ/m2/day)
+        Rs_np = calc_sRad_MJM2Day(month, year)
+        ##############################
+
+
+        #Derive Rnl: net long-wave radiation in MJ/m2/day - Completed 2018/7/18
+        Rnl_np = calc_Rnl(tmax,tmin,Ea,Rs_np, Ra_NP, year, month)
+
+
+
+        #Derive Incoming Net Shortwave Radiation - Completed 20180719
+        Rn_np =CalcRn(Rnl_np, Rs_np)
+
+
+        ##############################
+        #Check if next month is known for Soil Heat Flux Density Calculations
+        outNextMonth = checkNextMonth = (year, month)
+
+        if outNextMonth == "Yes":
+            #Derive monthly Soil Heat Flux Density (G - (MJ/m2/day)) using equations 43 when Next Month Is available
+            G_np = calc_G_nextMonthKnown(year, month)
+
+        else
+            #Derive monthly Soil Heat Flux Density (G - (MJ/m2/day)) using equations 44 when Next Month Is NOT available
+            G_np = calc_G_nextMonthUnknonw(year, month)
+        ##############################
+
+        #################################################
+        #Calculate the Top Left parameter (.408*D)
+        pt408_np = out_Delta_np
+        #Create Raster with value 0.408 every where
+        pt408_np[pt408_np > -999] = 0.408
+
+        #Calculate 0.408*D
+        pt408_delta_np = np.multiply(pt408_np, out_Delta_np)
+        del pt408_np
+        del out_Delta_np
+
+        #Calculate the (Rn-G) (i.e. Net Radiation minus Soil heat flux density)
+        Rn_minus_G_np = np.Subtract(Rn_np, G_np)
+
+
+        #Calculate the .408*D*(Rn-G)
+        Penman_topLeft_np = np.multiply(pt408_delta_np, Rn_minus_G_np)
+        del pt408_delta_np
+        del Rn_minus_G_np
+
+        'Export Penman Top Left to an output format (.tif in this case - may want to export all to .nc?
+        outPenmanTopLeft = outDir + "\\PenmanTopLeft_" + str(year) + "_" + str(month) + ".tif"
+        array2raster(soilAWS, outPenmanTopLeft, Penman_topLeft_np)
+        messageTime = timeFun()
+        print "Successfully derived 'Penman_topLeft_np' for year/month - " + str(year) + "_" + month + " - " +  outPenmanTopLeft + " - " + messageTime
+
+
+        return Penman_topLeft_np
+
+    except:
+        messageTime = timeFun()
+        print "Error Function 'Penman_topLeft - " + messageTime
+        traceback.print_exc(file=sys.stdout)
+        sys.exit()
+
+
+#Function derived the Penman-Monteith top middle equation ((900/Tavg + 273)*gamma)
+def Penman_topMiddle(year, month)
+
+    try:
+
+
+
+
+
+        return Penman_topMiddle_np
+
+    except:
+        messageTime = timeFun()
+        print "Error Function 'Penman_topMiddle' - " + messageTime
+        traceback.print_exc(file=sys.stdout)
+        sys.exit()
+
 
 #Function Calculated the Mean Temperature Array using the TMIN and TMAX inputs
 def calc_TMean(year, month)
@@ -1826,70 +1942,23 @@ def calc_TMean(year, month)
         return meanTemp_NP
 
 
-#Top Left Term of FAO Penman-Monteith (0.408 Delta(Rn-G)
-def Penman_topLeft(monthlyRadiation, year, month):
 
-    try:
+#Function evaluates if the year,month value has climatic data available
+def checkNextMonth(year, month)
 
-        pt408 = raster2array(datasetGlob[0])
-        #Create Raster with value 0.408 every where
-        pt408[pt408 > -999] = 0.408
+    if year == endYear: #Last Year, check if the month value is the December value after which (i.e Jan of next Year) no climatic data
 
+        if month == "12":
 
-        #Derive Delta - Completed Feb 2018
-        out_Delta = Penman_Delta(year, month)
+            outNextMonth = "No"
+        else
+            outNextMonth = "Yes"
 
-        #Derive Inverse Relative Distance - Using the mid Month Day value - Completed 2018/7/6
-        inverse_rel_distance = calc_inverse_rel_distance(month)
+    else
 
+        outNextMonth = "Yes"
 
-        #Derive sunset_hour_angle
-        sunset_hour_angle_NP = calc_sunset_hour_angle(latitude,solar_declination, month) #- Completed 2018/7/6
-
-
-        #Derive  Ra: extra-terrestrial radiation in MJ/m2/day. Equation 21 of Ch3 FAO doc. - Completed 2018/7/6
-        Ra_NP = calc_Ra(inverse_rel_distance,sunset_hour_angle_NP,latitude,solar_declination)
-
-        #Derive N = Maximum Daylength - Completed 2018/7/6
-        N_np = calc_daylength(sunset_hour_angle_NP)
-
-        #############################
-        #Derive Rs (MJ/m2/day) - Completed 2018/7/6 - I believe this is the equivalent of the Daymet sRad data product so calculaton is not necessary - KRS
-        #Rs_np =CalcRs(Ra_NP, year, month, N_np)
-
-        #Function to convert the native Daymet sRad (W/m2) to (MJ/m2/day)
-        Rs_np = calc_sRad_MJM2Day(month, year)
-        ##############################
-
-
-        #Derive Rnl: net long-wave radiation in MJ/m2/day - Completed 2018/7/18
-        Rnl_np = calc_Rnl(tmax,tmin,Ea,Rs_np, Ra_NP, year, month)
-
-
-
-        #Derive Incoming Net Shortwave Radiation - Completed 20180719
-        Rn_np =CalcRn(Rnl_np, Rs_np)
-
-        ##############################
-        #Stopped Here 2018/07/19 - KRS
-        ##############################
-
-
-
-
-
-
-
-        messageTime = timeFun()
-        print "xxx - " + " - " + messageTime
-
-
-
-    except:
-        messageTime = timeFun()
-        print "topLeft_Penman - " + messageTime
-        traceback.print_exc(file=sys.stdout)
-        sys.exit()
+    return outNextMonth
 
 
 def Penman_Delta(year, month): #CHECKS OK
@@ -1905,11 +1974,23 @@ def Penman_Delta(year, month): #CHECKS OK
 ##    D = top_term/bottom_term
 ##    return D
 
-    tmin = ""
-    tmax = ""
+
+    dirPath_Name = tmin + "\\*MonthlyAvg_" + str(year) + month + "*.nc"  'Directory Path and wildcard syntx for the srad NC File'
+    tmin_NC = glob.glob(dirPath_Name)
+
+    #Create the tmin array
+    tmin_np = raster2array(tmin_NC[0])
+
+
+    dirPath_Name = tmax + "\\*MonthlyAvg_" + str(year) + month + "*.nc"  'Directory Path and wildcard syntx for the srad NC File'
+    tmax_NC = glob.glob(dirPath_Name)
+
+    #Create the srad array
+    tmax_np = raster2array(tmax_NC[0])
+
 
     #Calculate the average temp
-    avgTemp = calc_avgTemp(tmin, tmax)
+    avgTemp_np = calc_avgTemp(tmin_np, tmax_np)
 
 
     #Calculate the (17.27*t)/(t+237.3)
@@ -1919,7 +2000,7 @@ def Penman_Delta(year, month): #CHECKS OK
     ras17pt27_NP[ras17pt27_NP > -999] = 17.27
 
     #(17.27*t)
-    deltaleft_NP = np.multiply(ras17pt27_NP, avgTemp)
+    deltaleft_NP = np.multiply(ras17pt27_NP, avgTemp_np)
     del ras17pt27_NP
 
 
@@ -1999,27 +2080,215 @@ def Penman_Delta(year, month): #CHECKS OK
     return outDelta
 
 #Function calculate the average temperature using the Tmax and Tmin' (tmax + tmin)/2) (KRS 20180122 Finished)
-def calc_avgTemp(tmin, tmax):
+def calc_avgTemp(tmin_np, tmax_np):
 
-    tmin_NP =  netCDF4.Dataset(tmin)
-    tmax_NP =  netCDF4.Dataset(tmax)
 
-    addTminTmax_NP = np.add(tmin_NP, tmax_NP)
-    del tmin_NP
-    del tmin_NP
+    addTminTmax_NP = np.add(tmin_np, tmax_np)
+    del tmin_np
+    del tmin_np
 
-    divide_2_NP = raster2array(tmin)
+    divide_2_NP = addTminTmax_NP
     #Create Raster with value 2 every where
     divide_2_NP[divide_2_NP > -999] = 2
 
     #Derive the tavg
     avgTemp = np.divide(ddTminTmax_NP, divide_2_NP)
 
-
     del addTminTmax_NP
     del divide_2_NP
 
-    return avgTemp
+    return avgTemp_np
+
+#Derive monthly Soil Heat Flux Density (G - (MJ/m2/day)) using equations 43 when (Tmonth i+1 is known (i.e. next monthly average temp is available)
+#Gmonth, i = 0.07 (Tmonth, i+1 - Tmonth, i-1) (43)
+def calc_G_nextMonthKnown(year, month)
+
+    monthList = ["10","11","12","01","02","03","04","05","06","07","08","09"]
+
+    #####################
+    #Calculate Tmonth,i+1 (i.e. Average temp of next Month)
+    monthIndex = monthList.index(month)
+
+    #Define monthly index, is September restart at beginning of index
+    if monthIndex == 11:
+        monthIndex_plus1 = 0
+
+    else
+        monthIndex_plus1 = monthIndex + 1
+
+    #Define the Month + 1 value (i.e the plus one month value)
+    month_iplus1 = monthList[monthIndex_plus1]
+
+    #Define the Year + 1 value (i.e the Year plus 1 month value.  If 'month' = 12 this will be 'year' + 1, else 'year')
+    if year == 12:
+        year_iplus1 = year + 1
+    else
+
+        year_iplus1 = year
+
+
+    dirPath_Name = tmin + "\\*MonthlyAvg_" + str(year_iplus1) + month_iplus1 + "*.nc"  'Directory Path and wildcard syntx for the srad NC File'
+    tmin_NC = glob.glob(dirPath_Name)
+
+    #Create the tmin array
+    tmin_np = raster2array(tmin_NC[0])
+
+
+    dirPath_Name = tmax + "\\*MonthlyAvg_" + str(year_iplus1) + month_iplus1 + "*.nc"  'Directory Path and wildcard syntx for the srad NC File'
+    tmax_NC = glob.glob(dirPath_Name)
+
+    #Create the tmax array
+    tmax_np = raster2array(tmax_NC[0])
+
+    Tmonth_iplus1_np = calc_avgTemp(tmin_np, tmax_np)
+    del tmin_np
+    del tmax_np
+    #####################
+
+
+
+    #####################
+    #Calculate Tmonth,i-1 (i.e. Average temp of previous Month)
+    monthIndex = monthList.index(month)
+
+    #Define monthly index, is October restart at end of List (i.e September
+    if monthIndex == 10:
+        monthIndex_minus1 = 11
+
+    else
+        monthIndex_minus1 = monthIndex - 1
+
+    #Define the Month - 1 value (i.e the previous month value)
+    month_iminus1 = monthList[monthIndex_minus1]
+
+    #Define the Year + 1 value (i.e the Year plus 1 month value.  If 'month' = 12 this will be 'year' + 1, else 'year')
+    if year == 01:
+        year_iminus1 = year - 1
+    else
+        year_iminus1 = year
+
+
+    dirPath_Name = tmin + "\\*MonthlyAvg_" + str(year_iminus1) + month_iminus1 + "*.nc"  'Directory Path and wildcard syntx for the srad NC File'
+    tmin_NC = glob.glob(dirPath_Name)
+
+    #Create the tmin array
+    tmin_np = raster2array(tmin_NC[0])
+
+
+    dirPath_Name = tmax + "\\*MonthlyAvg_" + str(year_iminus1) + month_iminus1 + "*.nc"  'Directory Path and wildcard syntx for the srad NC File'
+    tmax_NC = glob.glob(dirPath_Name)
+
+    #Create the tmax array
+    tmax_np = raster2array(tmax_NC[0])
+
+    Tmonth_iminus_np = calc_avgTemp(tmin_np, tmax_np)
+    del tmin_np
+    del tmax_np
+    #####################
+
+    #Calc - Tmonth_iplus1_np - Tmonth_iminus_np
+    right_Side_np = np.subtract(Tmonth_iplus1_np, Tmonth_iminus_np)
+    del Tmonth_iplus1_np
+    del Tmonth_iminus_np
+
+    #Derive the 0.07 array
+    pt07_np = right_Side_np
+    pt07_np[pt07_np > -1000000] = 0.07
+
+    #Derived 0.07 x (Tmonth_iplus1_np - Tmonth_iminus_np)
+
+    G_np = np.multiply(pt07_np, right_Side_np)
+    del pt07_np
+    del right_Side_np
+
+
+    return G_np
+
+
+
+#Derive monthly Soil Heat Flux Density (G - (MJ/m2/day)) using equations 44 when (Tmonth i+1 is Unknown (i.e. next monthly average temp is NOT available)
+#Gmonth, i = 0.14 (Tmonth, i - Tmonth, i-1) (44)
+def calc_G_nextMonthUnknown(year, month)
+
+    monthList = ["10","11","12","01","02","03","04","05","06","07","08","09"]
+
+    #####################
+    #Calculate Tmonth,i (i.e. the Current Month)
+
+    dirPath_Name = tmin + "\\*MonthlyAvg_" + str(year) + month + "*.nc"  'Directory Path and wildcard syntx for the srad NC File'
+    tmin_NC = glob.glob(dirPath_Name)
+
+    #Create the tmin array
+    tmin_np = raster2array(tmin_NC[0])
+
+
+    dirPath_Name = tmax + "\\*MonthlyAvg_" + str(year) + month + "*.nc"  'Directory Path and wildcard syntx for the srad NC File'
+    tmax_NC = glob.glob(dirPath_Name)
+
+    #Create the tmax array
+    tmax_np = raster2array(tmax_NC[0])
+
+    Tmonth_i_np = calc_avgTemp(tmin_np, tmax_np)
+    del tmin_np
+    del tmax_np
+    #####################
+
+    #####################
+    #Calculate Tmonth,i-1 (i.e. Average temp of previous Month)
+    monthIndex = monthList.index(month)
+
+    #Define monthly index, is October restart at end of List (i.e September
+    if monthIndex == 10:
+        monthIndex_minus1 = 11
+
+    else
+        monthIndex_minus1 = monthIndex - 1
+
+    #Define the Month - 1 value (i.e the previous month value)
+    month_iminus1 = monthList[monthIndex_minus1]
+
+    #Define the Year + 1 value (i.e the Year plus 1 month value.  If 'month' = 12 this will be 'year' + 1, else 'year')
+    if year == 01:
+        year_iminus1 = year - 1
+    else
+        year_iminus1 = year
+
+
+    dirPath_Name = tmin + "\\*MonthlyAvg_" + str(year_iminus1) + month_iminus1 + "*.nc"  'Directory Path and wildcard syntx for the srad NC File'
+    tmin_NC = glob.glob(dirPath_Name)
+
+    #Create the tmin array
+    tmin_np = raster2array(tmin_NC[0])
+
+
+    dirPath_Name = tmax + "\\*MonthlyAvg_" + str(year_iminus1) + month_iminus1 + "*.nc"  'Directory Path and wildcard syntx for the srad NC File'
+    tmax_NC = glob.glob(dirPath_Name)
+
+    #Create the tmax array
+    tmax_np = raster2array(tmax_NC[0])
+
+    Tmonth_iminus_np = calc_avgTemp(tmin_np, tmax_np)
+    del tmin_np
+    del tmax_np
+    #####################
+
+    #Calc - Tmonth_i_np - Tmonth_iminus_np
+    right_Side_np = np.subtract(Tmonth_i_np, Tmonth_iminus_np)
+    del Tmonth_iplus1_np
+    del Tmonth_iminus_np
+
+    #Derive the 0.14 array
+    pt14_np = right_Side_np
+    pt14_np[pt14_np > -1000000] = 0.14
+
+    #Derived 0.14 x (Tmonth_i - Tmonth_iminus_np)
+
+    G_np = np.multiply(pt14_np, right_Side_np)
+    del pt14_np
+    del right_Side_np
+
+
+    return G_np
 
 
 def calc_Ra(inverse_rel_distance, sunset_hour_angle_NP, latitude, solar_declination): #Completed 20180706
