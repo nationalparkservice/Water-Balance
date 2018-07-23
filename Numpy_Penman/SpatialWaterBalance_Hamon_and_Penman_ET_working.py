@@ -1784,9 +1784,6 @@ def Penman_Montieth(year, month):
         messageTime = timeFun()
         print "Successfully finished function 'Penman_topLeft' - " + " - " + messageTime
 
-        ######################
-        #Stopped Here 20180723 - KRS
-        ######################
 
         #Top Middle Term of FAO Penman-Monteith (900/corrected_tavg)*gamma
         Penman_topMiddle_np = Penman_topMiddle(year, month)
@@ -1899,8 +1896,49 @@ def Penman_topMiddle(year, month)
 
     try:
 
+        ##########################
+        #Caluclate the Tavg array
+        dirPath_Name = tmin + "\\*MonthlyAvg_" + str(year) + month + "*.nc"  'Directory Path and wildcard syntx for the srad NC File'
+        tmin_NC = glob.glob(dirPath_Name)
+
+        #Create the tmin array
+        tmin_np = raster2array(tmin_NC[0])
 
 
+        dirPath_Name = tmax + "\\*MonthlyAvg_" + str(year) + month + "*.nc"  'Directory Path and wildcard syntx for the srad NC File'
+        tmax_NC = glob.glob(dirPath_Name)
+
+        #Create the tmax array
+        tmax_np = raster2array(tmax_NC[0])
+
+        Tavg_np = calc_avgTemp(tmin_np, tmax_np)
+        ###############################
+
+        #Derive the array with 900
+        Array_900_np = Tavg_np
+        Array_900_np[Array_900_np > -100000] = 900.0
+
+
+        #Calculate 900/Tavg
+        Array_900_divide_Tavg_np = np.division(Array_900_np,Tavg_np)
+        del Array_900_np
+        del Tavg_np
+
+        #Derive the Kelvin array
+        Array_273_np = Array_900_divide_Tavg_np
+        Array_273_np[Array_273_np > -100000] = 273.0
+
+
+        #Calculate the (900/Tavg) + 273
+        withKelvin_np = np.add(Array_900_divide_Tavg_np, Array_273_np)
+        del Array_900_divide_Tavg_np
+        del Array_273_np
+
+
+        #Derive Gamma
+        ###########
+        #Stopped here 20180723 - KRS
+        ###########
 
 
         return Penman_topMiddle_np
