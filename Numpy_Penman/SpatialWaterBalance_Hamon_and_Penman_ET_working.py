@@ -1780,17 +1780,17 @@ def Penman_Montieth(year, month):
 
         #Top Left Term of FAO Penman-Monteith (0.408 Delta(Rn-G))
         Penman_topLeft_np = Penman_topLeft(netRadiation, year, month)
-
         messageTime = timeFun()
         print "Successfully finished function 'Penman_topLeft' - " + " - " + messageTime
 
 
         #Top Middle Term of FAO Penman-Monteith (900/corrected_tavg)*gamma
         Penman_topMiddle_np = Penman_topMiddle(year, month)
-
-
         messageTime = timeFun()
         print "Successfully finished function 'Penman_topMiddle' - " + " - " + messageTime
+
+
+        #Stopped here - 20180724 - KRs
 
 
 
@@ -1935,11 +1935,15 @@ def Penman_topMiddle(year, month)
         del Array_273_np
 
 
-        #Derive Gamma
-        ###########
-        #Stopped here 20180723 - KRS
-        ###########
+        #Derive atmopsheric pressure
+        atmos_pressure_np = calc_atmospheric_pressure(elevation)
 
+        #Derive Gamma
+        withKelvin_np = calc_gamma(atmos_pressure_np)
+
+
+        #Derive the: ((900/Tavg + 273)*gamma)
+        Penman_topMiddle_np = np.multiply(withKelvin_np, withKelvin_np)
 
         return Penman_topMiddle_np
 
@@ -2623,6 +2627,86 @@ def calc_sRad_MJM2Day(month, year)
     print "Successfully calculated the Short Wave Radiation Conversion to 'MJ/m2/day' - function 'calc_ShortWaveRad_MJM2Day'
     return sRad_np
 
+#Function caculates Gamma
+def calc_gamma(atmos_pressure_np):#Initial Derived 20180724
+##    Gamma is the psychrometric constant used for Penman_Montieth Eto
+##    gamma = 0.665 * .001 * atmospheric_pressure
+
+    #Create Array with 0.665 every where
+    pt665_np = atmos_pressure_np
+    pt665_np[pt665_np > -1000000] = 0.665
+
+
+    #Create Array with 0.001 every where
+    pt001_np = atmos_pressure_np
+    pt001_np[pt001_np > -1000000] = 0.001
+
+    #Derive: 0.665 * .001
+    pt001_x_pt665_np = np.multiply(pt665_np, pt001_np)
+    del pt665_np
+    del pt001_np
+
+    #Derive Gamma: 0.665 * .001 * atmospheric_pressure
+    gamma_np = np.multiply(pt001_x_pt665_np, atmos_pressure_np)
+
+    messageTime = timeFun()
+    print "Successfully calculated the Gamma constant -'calc_gamma' - " + messageTime
+
+    return gamma_np
+
+#Function to derive atmospheric pressure (
+def calc_atmospheric_pressure(elevation): #Initial Development 20180724
+
+##    tr = .0065*elevation
+##    top = 293-tr
+##    inside = top/293
+##    right = inside**5.26
+##    atmos_pressure = 101.3*right
+
+    #Create Elevation Array
+    elevation_np = raster2array(elevation)
+
+    #Create Array with 0.0065 every where
+    pt0065_np = elevation_np
+    pt0065_np[pt0065_np > -1000000] = 0.0065
+
+    #Derive: .0065*elevation
+    tr_np = np.multiply(pt0065_np,elevation_np)
+    del pt0065_np
+    del elevation_np
+
+    #Create Array with 293.0 every where
+    Array_293_np = tr_np
+    Array_293_np[Array_293_np > -1000000] = 293.0
+
+    #Derive: 293-(.0065*elevation)
+    top_np = np.Subtract(Array_293_np, tr_np)
+    del tr_np
+
+    #Derived: (293-(.0065*elevation)) / 293
+    inside_np = np.division(top_np, Array_293_np)
+    del top_np
+    del Array_293_np
+
+    #Create Array with 5.26 every where
+    Array_5pt26_np = inside_np
+    Array_5pt26_np[Array_5pt26_np > -1000000] = 5.26
+
+    #Derive: ((293-(.0065*elevation)) / 293)^5.26
+    right_np = np.power(inside_np, Array_5pt26_np)
+    del inside_np
+    del Array_5pt26_np
+
+    #Create Array with 101.3 every where
+    Array_101pt3_np = inside_np
+    Array_101pt3_np[Array_101pt3_np > -1000000] = 101.3
+
+    #Derive: 101.3*(((293-(.0065*elevation)) / 293)^5.26)
+    atmos_pressure_np = np.multiply(Array_101pt3_np, right_np)
+    del Array_101pt3_np
+    del right_np
+
+    return atmos_pressure_np
 
 #Function calculated the Vapour Pressure from Daymet to unit Kpa
 def calc_vp_kpa(month, year)
@@ -2634,7 +2718,7 @@ def calc_vp_kpa(month, year)
 
     #Create a 1000.0 Array
     Array_1000_np = raster2array(vp_NC[0])
-    Array_1000_np[ Array_1000_np > -1000000] = 1000.0
+    Array_1000_np[Array_1000_np > -1000000] = 1000.0
 
 
     #Derive the Vp array in unit Kpa
