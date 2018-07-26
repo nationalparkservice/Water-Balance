@@ -949,7 +949,7 @@ def dayLengthRas(latitude, monthSolarDec, month):
         sys.exit()
 
 
-#Function calculates the Saturaration Vapour Pressure at mean temperature Ta - equation 10 Dilts et. al. Biogeography 2015 Appendix S1)
+#Function calculates the Saturaration Vapour Pressure at mean temperature Ta - equation 10 Dilts et. al. Biogeography 2015 Appendix S1) - Hamon Equation when Mean Temp is available.
 def satVapourPressure(monthlyTempMean, month, year):
     try:
 
@@ -1790,6 +1790,14 @@ def Penman_Montieth(year, month):
         print "Successfully finished function 'Penman_topMiddle' - " + " - " + messageTime
 
 
+
+        #Top Right Term of FAO Penman-Monteith u2*(Es-Ea)
+        Penman_topRight_np = Penman_topRight(year, month)
+        messageTime = timeFun()
+        print "Successfully finished function 'Penman_topRight' - " + " - " + messageTime
+
+
+
         #Stopped here - 20180724 - KRs
 
 
@@ -1891,7 +1899,7 @@ def Penman_topLeft(monthlyRadiation, year, month):
         sys.exit()
 
 
-#Function derived the Penman-Monteith top middle equation ((900/Tavg + 273)*gamma)
+#Function derives the Penman-Monteith top middle equation ((900/Tavg + 273)*gamma)
 def Penman_topMiddle(year, month)
 
     try:
@@ -1950,6 +1958,52 @@ def Penman_topMiddle(year, month)
     except:
         messageTime = timeFun()
         print "Error Function 'Penman_topMiddle' - " + messageTime
+        traceback.print_exc(file=sys.stdout)
+        sys.exit()
+
+#Function derives the Penman-Monteith top right equation: u2*(Es-Ea)
+#u2 = wind speed at 2m height, set to 2 m/s by default
+#Es_minus_Ea = vapor pressure deficit in KPa
+#Es = Saturation vapour pressure (KPa) - This is the Daymet Water Vapor Pressure (native unit is Pa)
+#Ea = Actual vapour pressure (KPa)
+
+def Penman_topRight(year, month)
+
+    try:
+
+        ##########################
+        #Convert the Daymet Water Vapor Pressure to kPa - this is the Es-Saturation vapour pressure
+        Es_np = calc_vp_kpa(month, year)
+
+
+        #Derive the Mean Temp Array from the Min and Max
+        meanTemp_NP = calc_TMean(year, month)
+
+        #Subtract 2 Degrees from the TMean for the Ea at Tmean - 2 degrees calculation
+        np2 = meanTemp_NP
+        #Create Raster with value 0.408 every where
+        np2[np2 > -100000] = 2.0
+
+        #Subtract 2 from TMean
+        meanTemp_NP_Minus2 = np.subtract(meanTemp_NP, np2)
+        del meanTemp_NP
+        del np2
+
+
+        #Derive the Actual Vapor Pressure (Ea) at Tmean - 2 degrees for arid regions per FOA recommendation
+        Ea_np = calc_saturation_vapor_pressure_Ea(meanTemp_NP_Minus2)
+
+        #Stopped Here 20180726 - AM - KRS
+
+
+
+
+
+        return Penman_topRight_np
+
+    except:
+        messageTime = timeFun()
+        print "Error Function 'Penman_topRight' - " + messageTime
         traceback.print_exc(file=sys.stdout)
         sys.exit()
 
@@ -2708,7 +2762,69 @@ def calc_atmospheric_pressure(elevation): #Initial Development 20180724
 
     return atmos_pressure_np
 
-#Function calculated the Vapour Pressure from Daymet to unit Kpa
+
+def calc_saturation_vapor_pressure_Ea(meanTemp_NP_Minus2): #This is being used to derive the Ea (actual vapour pressure) for arid regions when humidity data is not available.  Recommendation
+# is to assume dewpoint is 2 degrees below Tmin.  This is not used to derive the Es when using Daymet data because this Daymet Water Vapor Pressure is this variable
+    # This is Es for a given t (Tmean-2 is the daymet case for deriving Ea)
+    # t = degrees C, equation 11 in FAO doc
+
+
+
+##    bracket_term = (17.27*t)/(t+237.3)
+##    right_term = numpy.exp(bracket_term)
+##    saturation_vapor_pressure = 0.6108 * right_term
+##    return saturation_vapor_pressure #kPa
+
+    try:
+        #Array 17.27
+        Array17pt27 = meanTemp_NP_Minus2
+        Array17pt27[Array17pt27 > -1000000] = 17.27
+
+
+        #17.27 * meanTemp
+        Array17pt27_x_meanTemp_NP = np.multiply(Array17pt27, meanTemp_NP_Minus2)
+        del Array17pt27
+
+
+        #Array 237.3
+        Array237pt3 = meanTemp_NP_Minus2
+        Array237pt3[Array237pt3  > -1000000] = 237.3
+
+
+        #237.3 + meanTemp
+        Array237pt_plus_meanTemp_NP = np.add(Array237pt3, meanTemp_NP_Minus2)
+        del Array237pt3
+        del meanTemp_NP_Minus2
+
+
+        #Bracket Term (17.27*t)/(t+237.3)
+        bracket_term_np = np.division(Array17pt27_x_meanTemp_NP, Array237pt_plus_meanTemp_NP)
+        del Array17pt27_x_meanTemp_NP
+        del Array237pt_plus_meanTemp_NP
+
+        #Calculate the exponential of the Right side of Sat Vap Pressure Equation
+        right_term_np = np.exp(bracket_term_np)
+        del bracket_term_np
+
+        #Array 0.6108
+        Arraypt6108 = right_term_np
+        Arraypt6108[Arraypt6108  > -1000000] = 0.6108
+
+        #Devired: saturation_vapor_pressure = 0.6108 * right_term
+        Ea_np = np.multiply(Arraypt6108, bracket_term_np)
+        del Arraypt6108
+        del bracket_term_np
+
+
+        return Ea_np
+
+     except:
+        messageTime = timeFun()
+        print "Error Function 'calc_saturation_vapor_pressure_Ea' - " + messageTime
+        traceback.print_exc(file=sys.stdout)
+        sys.exit()
+
+#Function calculates the Water Vapour Pressure from Daymet (Pa) to unit (Kpa).  Wate Vapour Pressure = Saturation vapour pressure.
 def calc_vp_kpa(month, year)
 
     dirPath_Name = vpDir + "\\*MonthlyAvg_" + str(year) + month + "*.nc"  'Directory Path and wildcard syntx for the Vapour Pressure NC File'
@@ -2960,10 +3076,6 @@ def calc_Ea_with_humidity_data(tmax, tmin, RHmean):#Function is only used if the
     left_term = RHmean / 100
     Ea = left_term * bracket_term
     return Ea
-
-
-
-
 
 
 if __name__ == '__main__':
