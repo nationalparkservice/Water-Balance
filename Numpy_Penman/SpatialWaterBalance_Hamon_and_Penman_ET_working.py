@@ -1783,22 +1783,28 @@ def Penman_Montieth(year, month):
         messageTime = timeFun()
         print "Successfully finished function 'Penman_topLeft' - " + " - " + messageTime
 
-
         #Top Middle Term of FAO Penman-Monteith (900/corrected_tavg)*gamma
         Penman_topMiddle_np = Penman_topMiddle(year, month)
         messageTime = timeFun()
         print "Successfully finished function 'Penman_topMiddle' - " + " - " + messageTime
-
-
 
         #Top Right Term of FAO Penman-Monteith u2*(Es-Ea)
         Penman_topRight_np = Penman_topRight(year, month)
         messageTime = timeFun()
         print "Successfully finished function 'Penman_topRight' - " + " - " + messageTime
 
+        #Derives the Penman Top Term (topmiddle_term*topright_term) + topleft_term
+        Penman_topTerm_np = Penman_topTerm(Penman_topLeft_np, Penman_topMiddle_np, Penman_topRight_np)
+        messageTime = timeFun()
+        print "Successfully finished function 'Penman_topTerm' - " + " - " + messageTime
 
 
-        #Stopped here - 20180724 - KRs
+        #Derive the Penman Bottom Right Term: (1 + wind_correction) * gamma
+        Penman_bottomRight_np= Penman_bottomRightTerm(u2_np, gamma_np)
+
+
+
+        #Stopped here - 20180726 - KRS
 
 
 
@@ -1872,7 +1878,7 @@ def Penman_topLeft(monthlyRadiation, year, month):
         #Calculate 0.408*D
         pt408_delta_np = np.multiply(pt408_np, out_Delta_np)
         del pt408_np
-        del out_Delta_np
+        #del out_Delta_np
 
         #Calculate the (Rn-G) (i.e. Net Radiation minus Soil heat flux density)
         Rn_minus_G_np = np.Subtract(Rn_np, G_np)
@@ -1938,7 +1944,7 @@ def Penman_topMiddle(year, month)
 
 
         #Calculate the (900/Tavg) + 273
-        withKelvin_np = np.add(Array_900_divide_Tavg_np, Array_273_np)
+        leftTerm_np = np.add(Array_900_divide_Tavg_np, Array_273_np)
         del Array_900_divide_Tavg_np
         del Array_273_np
 
@@ -1947,11 +1953,13 @@ def Penman_topMiddle(year, month)
         atmos_pressure_np = calc_atmospheric_pressure(elevation)
 
         #Derive Gamma
-        withKelvin_np = calc_gamma(atmos_pressure_np)
+        gamma_np = calc_gamma(atmos_pressure_np)
 
 
         #Derive the: ((900/Tavg + 273)*gamma)
-        Penman_topMiddle_np = np.multiply(withKelvin_np, withKelvin_np)
+        Penman_topMiddle_np = np.multiply(leftTerm_np, gamma_np)
+        del leftTerm_np
+
 
         return Penman_topMiddle_np
 
@@ -1981,8 +1989,8 @@ def Penman_topRight(year, month)
 
         #Subtract 2 Degrees from the TMean for the Ea at Tmean - 2 degrees calculation
         np2 = meanTemp_NP
-        #Create Raster with value 0.408 every where
-        np2[np2 > -100000] = 2.0
+        #Create Raster with value -2 every where
+        np2[np2 > -100000] = -2.0
 
         #Subtract 2 from TMean
         meanTemp_NP_Minus2 = np.subtract(meanTemp_NP, np2)
@@ -1993,17 +2001,69 @@ def Penman_topRight(year, month)
         #Derive the Actual Vapor Pressure (Ea) at Tmean - 2 degrees for arid regions per FOA recommendation
         Ea_np = calc_saturation_vapor_pressure_Ea(meanTemp_NP_Minus2)
 
-        #Stopped Here 20180726 - AM - KRS
+        #Derive (Es - Ea)
+        Es_minus_Ea_np = np.subtract(Es_np, Ea_np)
+        del Es_np
+        del Ea_np
 
+        #Derive the wind speed at 2m height, set to 2 m/s by defaul
+        u2_np = Es_minus_Ea_np
+        #Create Raster with value 2 every where
+        u2_np[u2_np > -100000] = 2.0
 
-
-
+        #Derive final Penman_TopRight: u2*(Es-Ea)
+        Penman_topRight_np = np.multiply(u2_np,Es_minus_Ea_np)
+        #del u2_np
+        del Es_minus_Ea_np
 
         return Penman_topRight_np
 
     except:
         messageTime = timeFun()
         print "Error Function 'Penman_topRight' - " + messageTime
+        traceback.print_exc(file=sys.stdout)
+        sys.exit()
+
+#Derives the Penman Top Term (topmiddle_term*topright_term) + topleft_term
+def Penman_topTerm(Penman_topLeft_np, Penman_topMiddle_np, Penman_topRight_np)
+
+    try:
+
+        #Multiply topmiddle_term*topright_term
+        bracket_np = np.multiply(Penman_topMiddle_np, Penman_topRight_np)
+        del Penman_topMiddle_np
+        del Penman_topRight_np
+
+        #Final Calc: topmiddle_term*topright_term) + topleft_term
+        Penman_topTerm_np = np.add(bracket_np, Penman_topLeft_np)
+        del bracket_np
+        del Penman_topLeft_np
+
+        return Penman_topTerm_np
+
+    except:
+        messageTime = timeFun()
+        print "Error Function 'Penman_topTerm' - " + messageTime
+        traceback.print_exc(file=sys.stdout)
+        sys.exit()
+
+#Derives the Penman Bottom Right Term: (1 + wind_correction) * gamma
+def  Penman_bottomRightTerm(u2_np, gamma_np)
+
+    try:
+
+
+
+
+
+
+
+
+        return Penman_bottomRightTerm_np
+
+    except:
+        messageTime = timeFun()
+        print "Error Function 'Penman_bottomRightTerm' - " + messageTime
         traceback.print_exc(file=sys.stdout)
         sys.exit()
 
