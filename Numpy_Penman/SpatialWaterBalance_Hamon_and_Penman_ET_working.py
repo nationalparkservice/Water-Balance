@@ -2051,7 +2051,7 @@ def Penman_topTerm(Penman_topLeft_np, Penman_topMiddle_np, Penman_topRight_np)
 def  Penman_bottomRightTerm(u2_np, gamma_np)
 
     try:
-
+        #Final Calcu
 
 
 
