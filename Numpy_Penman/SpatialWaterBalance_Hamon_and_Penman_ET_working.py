@@ -1978,24 +1978,29 @@ def Penman_topMiddle(year, month)
 def Penman_topRight(year, month)
 
     try:
+        # Mean saturation vapor pressure derived from air temperature(Es)
 
-        ##########################
-        #Convert the Daymet Water Vapor Pressure to kPa - this is the Es-Saturation vapour pressure
-        vp_kpa_np = calc_vp_kpa(month, year)
-
-        #Derive Es
+        #Derive Es: Step 10. Es = e(Tmax)+ e(TMIN)/2
+        # e(Tmax) = 0.6108exp((17.27*Tmax) / (TMax + 237.3))
+        # e(Tmin) = 0.6108exp((17.27*Tmin) / (TMin + 237.3))
         Es_np = calc_Es(month, year)
 
 
-        #Derive the Actual Vapor Pressure (Ea).  With Daymet Data this is the Daymet VP (Water Vapor Pressure (PA) converted to (KPA) follow Thoma's Excel Calculation here.
-        Ea_np = calc_vp_kpa(month, year)
+        #Step 11 - Actual vapor pressure (ea) derived from rleative humidity - Completed 20180810
+        #Derive Ea:Step 11. Ea = (e(Tmin)[RHmax/100] + e(Tmax)[RHmin/100])/2
+        Ea_np = calc_Ea(month, year)
+
+
 
         #Derive (Es - Ea)
         Es_minus_Ea_np = np.subtract(Es_np, Ea_np)
         del Es_np
         del Ea_np
 
-        #Derive the wind speed at 2m height, set to 2 m/s by defaul
+
+        #########Stoped here 20180810
+
+        #Derive the wind speed at 2m height, set to 2 m/s by defaul - David did you do this in Row U in your worksheet?  Seems to be an incrementation number
         u2_np = Es_minus_Ea_np
         #Create Raster with value 2 every where
         u2_np[u2_np > -100000] = 2.0
@@ -2815,6 +2820,7 @@ def calc_atmospheric_pressure(elevation): #Initial Development 20180724
 def calc_saturation_vapor_pressure(temp_NP): #This is being used to derive the Ea (actual vapour pressure) for arid regions when humidity data is not available.  Recommendation
 # is to assume dewpoint is 2 degrees below Tmin.
     # t = degrees C, equation 11 in FAO doc
+    # e(T) = 0.6108exp[(17.27* T)/ (T + 237.3)]
 
 
 ##    bracket_term = (17.27*t)/(t+237.3)
@@ -2910,6 +2916,273 @@ def calc_Es(month, year): #Derived 20180803
     del np_2
 
     return Es_np
+
+#Step 11 - Actual vapor pressure (ea) derived with relative humidity data
+#Derive Ea:Step 11- Calc Penmann Step by Step. Ea = (e(Tmin)[RHmax/100] + e(Tmax)[RHmin/100])/2
+def calc_Ea(month, year)
+    try:
+
+
+        'Derive Relative Humdity RH = vp from daymet / SVP
+        rh_np = calc_Rh(month,year)
+
+        ######################################
+        #Derive Top Left : e(Tmin)[RHmax/100])
+
+        'Derived Relative Humdity at Tmax - RHmax'
+        rhTmax_np = calc_RhTmax(month, year)
+
+
+        'Create Array with value of 100
+        Array100_np = rhTmax_np
+        Array100_np[Array100_np > -1000000] = 100.0
+
+        rhmax_div100_np = np.division(rhTmax_np, Array100_np)
+        del rhTmax_np
+        del Array100_np
+
+
+        'Derive the eTMIN'
+        dirPath_Name = tminDir + "\\*MonthlyAvg_" + str(year) + month + "*.nc"  'Directory Path and wildcard syntx for the Vapour Pressure NC File'
+        tmin_NC = glob.glob(dirPath_Name)
+        tmin_np = raster2array(tmin_NC[0])
+        Etmin_np = calc_saturation_vapor_pressure(tmin_np)
+        del tmin_np
+
+        'Derive: etmin * (RHmax/100)
+        topLeft_np = np.multiply(Etmin_np, rhmax_div100_np)
+        del Etmin_np
+        del rhmax_div100_np
+
+
+
+        ########################################
+        #Derive Top Right 'e(Tmax)[RHmin/100])
+
+        #Derived Relative Humdity at Tmin - RHmin'
+        rhTmin_np = calc_RhTmin(month, year)
+
+        #Create Array with value of 100
+        Array100_np = rhTmin_np
+        Array100_np[Array100_np > -1000000] = 100.0
+
+        rhmin_div100_np = np.division(rhTmin_np, Array100_np)
+        del rhTmin_np
+        del Array100_np
+
+        #Derive eTMax'
+        dirPath_Name = tmaxDir + "\\*MonthlyAvg_" + str(year) + month + "*.nc"  'Directory Path and wildcard syntx for the Vapour Pressure NC File'
+        tmax_NC = glob.glob(dirPath_Name)
+        tmax_np = raster2array(tmax_NC[0])
+        Etmax_np = calc_saturation_vapor_pressure(tmax_np)
+        del tmax_np
+
+
+        topRight_np = np.multiply(Etmax_np, rhmin_div100_np)
+        del Etmax_np
+        del rhmin_div100_np
+
+
+
+        #####################
+        #Derive Full Top: (e(Tmin)[RHmax/100] + e(Tmax)[RHmin/100])
+        fullTop_np = np.add(topLeft_np, topRight_np)
+        del topLeft_np
+        del topRight_np
+
+
+
+
+        ################################
+        # Divide by Create Array with value of 2.0
+        Array2_np = topRight_np
+        Array2_np[Array2_np > -1000000] = 2.0
+
+
+        Ea_np = np.division(fullTop_np, Array2_np)
+        del fullTop_np
+        del Array2_np
+
+        return Ea_np
+
+    except:
+        messageTime = timeFun()
+        print "Error calc_Ea function - " + messageTime
+        traceback.print_exc(file=sys.stdout)
+        sys.exit()
+
+
+
+'Derive svp for Humdity Calculation at Tmax - Following  Thoma Equation Excel Spreadsheet (P9)
+'SVP =610.7*10^(7.5*Tmax/(237.3+Tmax)))Tmax temps from a single day.
+def calc_svpTmax_forHumdity (month, year)
+
+    try:
+
+        '1.Define the Tmax dataset value'
+        dirPath_Name = tmax + "\\*MonthlyAvg_" + str(year) + month + "*.nc"  'Directory Path and wildcard syntx for the Vapour Pressure NC File'
+        tmax_NC = glob.glob(dirPath_Name)
+        tmax_np = raster2array(tmax_NC[0])
+
+
+        #Create a 7.5 Array
+        Array_7pt5_np = tmax_np
+        Array_7pt5_np[Array_7pt5_np > -1000000] = 7.5
+
+        #Derive (7.5 * Tmax)
+        Array_7pt5_right_np = np.multiply(Array_7pt5_np, tmax_np)
+        del Array_7pt5_np
+
+        #2.Create a 237.5 Array
+        Array_237pt5_np = tmax_np
+        Array_237pt5_np[Array_237pt5_np > -1000000] = 237.5
+
+        #Derive (237.5 + TMax)
+        Array_237pt5_Tmax_np = np.Add(Array_237pt5_np, tmax_np)
+        del Array_237pt5_np
+
+        #3.Derive (7.5 * Tmax)/(237.5 + Tmax)
+        topRight_np = np.division(Array_7pt5_right_np, Array_237pt5_Tmax_np)
+        del Array_7pt5_right_np
+        del Array_237pt5_Tmax_np
+        del tmax_np
+
+        #4 Derive 10^(7.5 * Tmax)/(237.5 + Tmax)
+        Array10_np = topRight_np
+        Array10_np[Array10_np > -1000000] = 10.0
+
+        rs_raised10_np = np.power(Array10_np, topRight_np)
+        del Array10_np
+        del topRight_np
+
+        #5 Derive: 610.7 * 10^(7.5 * Tmax)/(237.5 + Tmax)
+        Array610pt7_np = rs_raised10_np
+        Array610pt7_np[Array610pt7_np > -1000000] = 610.7
+
+        svp_np = np.multiply(Array610pt7_np, rs_raised10_np)
+        del Array610pt7_np
+        del rs_raised10_np
+
+        return svpTmax_np
+
+
+    except:
+        messageTime = timeFun()
+        print "Error calc_svpTmax_forHumdity function - " + messageTime
+        traceback.print_exc(file=sys.stdout)
+        sys.exit()
+
+
+'Derive svp for Humdity Calculation at Tmin - Following  Thoma Equation Excel Spreadsheet (P9)
+'SVP =610.7*10^(7.5*Tmin/(237.3+Tmin)))Tmin temps from a single day.
+def calc_svpTmin_forHumdity (month, year)
+
+    try:
+
+        '1.Define the Tmin dataset value'
+        dirPath_Name = tmin + "\\*MonthlyAvg_" + str(year) + month + "*.nc"  'Directory Path and wildcard syntx for the Vapour Pressure NC File'
+        tmin_NC = glob.glob(dirPath_Name)
+        tmin_np = raster2array(tmin_NC[0])
+
+        #Create a 7.5 Array
+        Array_7pt5_np = tmin_np
+        Array_7pt5_np[Array_7pt5_np > -1000000] = 7.5
+
+        #Derive (7.5 * Tmin)
+        Array_7pt5_right_np = np.multiply(Array_7pt5_np, tmin_np)
+        del Array_7pt5_np
+
+        #2.Create a 237.5 Array
+        Array_237pt5_np = tmin_np
+        Array_237pt5_np[Array_237pt5_np > -1000000] = 237.5
+
+        #Derive (237.5 + TMin)
+        Array_237pt5_Tmin_np = np.Add(Array_237pt5_np, tmin_np)
+        del Array_237pt5_np
+
+        #3.Derive (7.5 * Tmin)/(237.5 + Tmin)
+        topRight_np = np.division(Array_7pt5_right_np, Array_237pt5_Tmin_np)
+        del Array_7pt5_right_np
+        del Array_237pt5_Tmin_np
+        del Tmin_np
+
+        #4 Derive 10^(7.5 * Tmin)/(237.5 + Tmin)
+        Array10_np = topRight_np
+        Array10_np[Array10_np > -1000000] = 10.0
+
+        rs_raised10_np = np.power(Array10_np, topRight_np)
+        del Array10_np
+        del topRight_np
+
+        #5 Derive: 610.7 * 10^(7.5 * Tmin)/(237.5 + Tmin)
+        Array610pt7_np = rs_raised10_np
+        Array610pt7_np[Array610pt7_np > -1000000] = 610.7
+
+        svp_np = np.multiply(Array610pt7_np, rs_raised10_np)
+        del Array610pt7_np
+        del rs_raised10_np
+
+        return svpTmin_np
+
+
+    except:
+        messageTime = timeFun()
+        print "Error calc_svpTmin_forHumdity function - " + messageTime
+        traceback.print_exc(file=sys.stdout)
+        sys.exit()
+
+'Function: Derives Relative Humidity at the TMax temperature'
+'Relative Humdity RH = vp from daymet / SVP
+'vp: Daymat Vapour Pressure / 1000 = kpa'
+def calc_RhTmax(month, year)
+
+    try:
+
+        'Derive svp for Humdity at Tmax' - Following Thoma Penman Excel Equation (P9)
+        svpTmax_np = calc_svpTmax_forHumdity(month, year)
+
+        #Daymet VP (Water Vapor Pressure (PA) converted to (KPA)
+        vp_kpa_np = calc_vp_kpa(month, year)
+
+        rhTmax_np = np.division(vp_kpa_np, svpTmax_np)
+        del vp_kpa_np
+        del svpTmax_np
+
+
+    return rhTmax_np
+
+    except:
+        messageTime = timeFun()
+        print "Error calc_RhTmax function - " + messageTime
+        traceback.print_exc(file=sys.stdout)
+        sys.exit()
+
+
+'Function: Derives Relative Humidity at the TMin temperature'
+'Relative Humdity RH = vp from daymet / SVP
+'vp: Daymat Vapour Pressure / 1000 = kpa'
+def calc_RhTmin(month, year)
+
+    try:
+
+        'Derive svp for Humdity at Tmin' - Following Thoma Penman Excel Equation (P9)
+        svpTmin_np = calc_svpTmin_forHumdity(month, year)
+
+        #Daymet VP (Water Vapor Pressure (PA) converted to (KPA)
+        vp_kpa_np = calc_vp_kpa(month, year)
+
+        rhTmin_np = np.division(vp_kpa_np, svpTmin_np)
+        del vp_kpa_np
+        del svpTmin_np
+
+
+    return rhTmax_np
+
+    except:
+        messageTime = timeFun()
+        print "Error calc_RhTmax function - " + messageTime
+        traceback.print_exc(file=sys.stdout)
+        sys.exit()
 
 #Function calculates the Water Vapour Pressure from Daymet (Pa) to unit (Kpa).
 def calc_vp_kpa(month, year)
