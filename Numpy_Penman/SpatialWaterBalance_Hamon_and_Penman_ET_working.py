@@ -41,14 +41,15 @@ pptDir = r'E:\SWB\GRSA\PRISM_2000_2016\PPT\Resampled'        ##Directory with th
 
 #Penmon-Monteith ET variables (Daymet- NetCDF)
 tmaxDir = r'E:\Daymet\GRSA\tmax'       ##Directory with the tmax variables
-tminDir = r''       ##Directory with the tmin variables
-vpDir = r''         ##Direcotry with the vapour pressure variables
-sRad = r''          ##Direcotry with the Solar Radiation variables (note Daymet sRad unit is W/m2)
+tminDir = r'E:\Daymet\GRSA\tmin'       ##Directory with the tmin variables
+vpDir = r'E:\Daymet\GRSA\vp'         ##Direcotry with the vapour pressure variables
+sRad = r'E:\Daymet\GRSA\srad'          ##Direcotry with the Solar Radiation variables (note Daymet sRad unit is W/m2)
 dayl = r'E:\Daymet\GRSA\dayl'          ##Directory with the Day Length variables
 
-heatLoadIndex = "Yes"       ##Switch ("Yes"|"No") defining if Heat Load Index (Topographic Factors Slope and Aspect Included in Potential Evopotranspiration Calculation (See Eq 16 Dilts et. al. 2015 Biogeography)
+heatLoadIndex = "Yes"       ##Switch ("Yes"|"No") defining if Heat Load Index (Topographic Factors Slope and Aspect) should be included in PET Calculation (See Eq 16 Dilts et. al. 2015 Biogeography)
 etEquation = "Penman-Monteith"  ##Switch ("Hamon"|"Penman-Monteith") defining if the Evapotranspiration Equation to be used.
 rasterHeatLoad = "N/A"       ##Switch("Dir Path"|"N/A") Optinal variable to define a previously derived Heat Load Index.  If set to "N/A" script will derive using Aspect, Slope and Latitude Inputs
+
 #Misc Input Data Sets
 septSnowPack = r'D:\ROMN\working\WaterBalance\GRSA\GIS\Sept_SnowPack_AllZero.tif'  ##Raster with default September Snow Pack for first year of processing - assumption is no snowpack at end of water year
 latitude = r'D:\ROMN\working\WaterBalance\GRSA\GIS\Latitude_GRSA.tif' ##Raster with Latitude values (GCS) for the AOA (Not used if Daymet Daylegnth is being used, Match cell size and snap to input climatic variables.
@@ -58,17 +59,17 @@ elevation = r'D:\ROMN\working\WaterBalance\GRSA\GIS\dem_albers_GRSA_10km.tif' #D
 
 soilAWS = r'D:\ROMN\working\WaterBalance\GRSA\GIS\GRSA_10km_AWS_0_150cm_Infill_100mm.tif'   ##Available water supply (mm) raster from gSSURGO data to a define soil depth (e.g. 0-150 cm, etc.), Null values have been infilled with a near Mean AWS value of 125 mm.
 percAWSInitial = 10   ##The percent (0-100%)of AWS by soil to be used in the initial previous month (September) calculation of the soil water balance.
-previousSWB = ''
 
+#DayLength Rasters Definition
 deriveDayLengthRasters = "No"     ##Switch ("Yes"|"No") defining if Average Day Length rasters (Hours) by month should be derived (Yes) or use Daymet average daylength rasters (No) in
                             ##place of manually derived.  Note as of 2015/08/31 - equations for Manually derived day Length Calculations are not working correctly.
 avgMonthlyDayLengthRasters = r'D:\ROMN\working\Climate\Daymet\GRSA_Average_DayLength'   ## Average monthly day length rasters - obtained from Daymet Data.
-dayLengthWildCard = "*Average_dayl_2010"   ##WildCard Syntax for DayLength Rasters (not used if manually derived day Length.  Month and .tif are always the end suffix
+dayLengthWildCard = "*Average_dayl_2010"   ##WildCard Syntax for DayLength Rasters (not used if manually derived day Length.  Month and .tif are always the end suffix - Not Appliciable if using Daymet Data and Penman-Monteith ET
 
 #Output and Workspace Parameters
-outDir = r'D:\ROMN\working\WaterBalance\GRSA\MultiYear'   ## Location for output
-workspace = r'D:\ROMN\working\WaterBalance\GRSA\workspace'      ## Workspace for Processing
-logFileName = workspace + "\\ClimateWaterDeficit_GRSA_MultYear.txt"          ##Logfile Name
+outDir = r'E:\SWB\GRSA\Penman_ET'   ## Location for output
+workspace = r'E:\SWB\GRSA\Penman_ET\workspace'      ## Workspace for Processing
+logFileName = workspace + "\\AAA_GRSA_Penman_ET_logFile.txt"          ##Logfile Name
 
 #######################################
 ## Below are paths which are hard coded
@@ -115,9 +116,6 @@ def timeFun():          #Function to Grab Time
 
 def main():
     try:
-
-##        testFile = r'D:\ROMN\working\WaterBalance\GRSA\workspace\SetNull_tif1.tif'
-##        testFile_np = raster2array(testFile)
 
 
         yearRange = range(startYear, endYear + 1)
@@ -1882,9 +1880,10 @@ def Penman_topLeft(monthlyRadiation, year, month):
             #Derive monthly Soil Heat Flux Density (G - (MJ/m2/day)) using equations 43 when Next Month Is available
             G_np = calc_G_nextMonthKnown(year, month)
 
-        else
+        else:
             #Derive monthly Soil Heat Flux Density (G - (MJ/m2/day)) using equations 44 when Next Month Is NOT available
             G_np = calc_G_nextMonthUnknonw(year, month)
+
         ##############################
 
         #################################################
@@ -1907,7 +1906,7 @@ def Penman_topLeft(monthlyRadiation, year, month):
         del pt408_delta_np
         del Rn_minus_G_np
 
-        'Export Penman Top Left to an output format (.tif in this case - may want to export all to .nc?
+        #Export Penman Top Left to an output format (.tif in this case - may want to export all to .nc?
         outPenmanTopLeft = outDir + "\\PenmanTopLeft_" + str(year) + "_" + str(month) + ".tif"
         array2raster(soilAWS, outPenmanTopLeft, Penman_topLeft_np)
         messageTime = timeFun()
@@ -1924,7 +1923,7 @@ def Penman_topLeft(monthlyRadiation, year, month):
 
 
 #Function derives the Penman-Monteith top middle equation ((900/Tavg + 273)*gamma)
-def Penman_topMiddle(year, month)
+def Penman_topMiddle(year, month):
 
     try:
 
@@ -1993,7 +1992,7 @@ def Penman_topMiddle(year, month)
 #Es = Saturation vapour pressure (KPa)
 #Ea = Actual vapour pressure (KPa)
 
-def Penman_topRight(year, month)
+def Penman_topRight(year, month):
 
     try:
         # Mean saturation vapor pressure derived from air temperature(Es)
@@ -2037,7 +2036,7 @@ def Penman_topRight(year, month)
         sys.exit()
 
 #Derives the Penman Top Term (topmiddle_term*topright_term) + topleft_term
-def Penman_topTerm(Penman_topLeft_np, Penman_topMiddle_np, Penman_topRight_np)
+def Penman_topTerm(Penman_topLeft_np, Penman_topMiddle_np, Penman_topRight_np):
 
     try:
 
@@ -2061,7 +2060,7 @@ def Penman_topTerm(Penman_topLeft_np, Penman_topMiddle_np, Penman_topRight_np)
 
 #Derives the Penman Bottom Right Term: (1 + wind_correction) * gamma
 # Wind Correction = 0.34 * u2 (i.e. wind speed)
-def  Penman_bottomRightTerm(u2_np, gamma_np)
+def  Penman_bottomRightTerm(u2_np, gamma_np):
 
     try:
         #Derive the wind correction value (0.34 * u2)
@@ -2101,7 +2100,7 @@ def  Penman_bottomRightTerm(u2_np, gamma_np)
 
 
 #Derive overall Bottom term: delta + gamma *(1 + wind_correction)
-def  Penman_bottomTerm(delta_np, penman_bottomRightTerm_np)
+def  Penman_bottomTerm(delta_np, penman_bottomRightTerm_np):
 
     try:
 
@@ -2122,7 +2121,7 @@ def  Penman_bottomTerm(delta_np, penman_bottomRightTerm_np)
         sys.exit()
 
 #Derive overall Penman-Monteith ET Equation:
-def Penman_FullTerm(Penman_topTerm_np, penman_bottomTerm_np)
+def Penman_FullTerm(Penman_topTerm_np, penman_bottomTerm_np):
 
     try:
 
@@ -2140,18 +2139,18 @@ def Penman_FullTerm(Penman_topTerm_np, penman_bottomTerm_np)
 
 
 #Function Calculated the Mean Temperature Array using the TMIN and TMAX inputs
-def calc_TMean(year, month)
-'Get the Correct Monthly Tmax dataset'
+def calc_TMean(year, month):
+        #Get the Correct Monthly Tmax dataset'
         out_Path = funPathName_dataset(tmaxDir, "\\*MonthlyAvg_", year, month, "*.nc")
         datasetGlob = glob.glob(out_Path)
-        'Create the Numpy Array'
+        #Create the Numpy Array'
         tmax_np = raster2array(datasetGlob[0])
 
 
-        'Get the Correct Monthly Tmin dataset'
+        #Get the Correct Monthly Tmin dataset'
         out_Path = funPathName_dataset(tminDir, "\\*MonthlyAvg_", year, month, "*.nc")
         datasetGlob = glob.glob(out_Path)
-        'Create the Numpy Array'
+        #Create the Numpy Array'
         tmin_np = raster2array(datasetGlob[0])
 
         #Add Tmax and Tmin
@@ -2175,17 +2174,17 @@ def calc_TMean(year, month)
 
 
 #Function evaluates if the year,month value has climatic data available
-def checkNextMonth(year, month)
+def checkNextMonth(year, month):
 
     if year == endYear: #Last Year, check if the month value is the December value after which (i.e Jan of next Year) no climatic data
 
         if month == "12":
 
             outNextMonth = "No"
-        else
+        else:
             outNextMonth = "Yes"
 
-    else
+    else:
 
         outNextMonth = "Yes"
 
@@ -2332,7 +2331,7 @@ def calc_avgTemp(tmin_np, tmax_np):
 
 #Derive monthly Soil Heat Flux Density (G - (MJ/m2/day)) using equations 43 when (Tmonth i+1 is known (i.e. next monthly average temp is available)
 #Gmonth, i = 0.07 (Tmonth, i+1 - Tmonth, i-1) (43)
-def calc_G_nextMonthKnown(year, month)
+def calc_G_nextMonthKnown(year, month):
 
     monthList = ["10","11","12","01","02","03","04","05","06","07","08","09"]
 
@@ -2344,7 +2343,7 @@ def calc_G_nextMonthKnown(year, month)
     if monthIndex == 11:
         monthIndex_plus1 = 0
 
-    else
+    else:
         monthIndex_plus1 = monthIndex + 1
 
     #Define the Month + 1 value (i.e the plus one month value)
@@ -2353,7 +2352,7 @@ def calc_G_nextMonthKnown(year, month)
     #Define the Year + 1 value (i.e the Year plus 1 month value.  If 'month' = 12 this will be 'year' + 1, else 'year')
     if year == 12:
         year_iplus1 = year + 1
-    else
+    else:
 
         year_iplus1 = year
 
@@ -2386,7 +2385,7 @@ def calc_G_nextMonthKnown(year, month)
     if monthIndex == 10:
         monthIndex_minus1 = 11
 
-    else
+    else:
         monthIndex_minus1 = monthIndex - 1
 
     #Define the Month - 1 value (i.e the previous month value)
@@ -2395,7 +2394,7 @@ def calc_G_nextMonthKnown(year, month)
     #Define the Year + 1 value (i.e the Year plus 1 month value.  If 'month' = 12 this will be 'year' + 1, else 'year')
     if year == 01:
         year_iminus1 = year - 1
-    else
+    else:
         year_iminus1 = year
 
 
@@ -2439,7 +2438,7 @@ def calc_G_nextMonthKnown(year, month)
 
 #Derive monthly Soil Heat Flux Density (G - (MJ/m2/day)) using equations 44 when (Tmonth i+1 is Unknown (i.e. next monthly average temp is NOT available)
 #Gmonth, i = 0.14 (Tmonth, i - Tmonth, i-1) (44)
-def calc_G_nextMonthUnknown(year, month)
+def calc_G_nextMonthUnknown(year, month):
 
     monthList = ["10","11","12","01","02","03","04","05","06","07","08","09"]
 
@@ -2472,7 +2471,7 @@ def calc_G_nextMonthUnknown(year, month)
     if monthIndex == 10:
         monthIndex_minus1 = 11
 
-    else
+    else:
         monthIndex_minus1 = monthIndex - 1
 
     #Define the Month - 1 value (i.e the previous month value)
@@ -2481,7 +2480,7 @@ def calc_G_nextMonthUnknown(year, month)
     #Define the Year + 1 value (i.e the Year plus 1 month value.  If 'month' = 12 this will be 'year' + 1, else 'year')
     if year == 01:
         year_iminus1 = year - 1
-    else
+    else:
         year_iminus1 = year
 
 
@@ -2780,7 +2779,7 @@ def calc_Rnl(tmax,tmin,Ea,Rs_np,Ra_NP, year, month): #
     return Rnl_np
 
 #Function calculates the Daily total radiation (MJ/m2/day) using the following equation: ((srad (W/m2) * dayl (s/day)) / 1,000,000)
-def calc_sRad_MJM2Day(month, year)
+def calc_sRad_MJM2Day(month, year):
     dirPath_Name = sRad + "\\*MonthlyAvg_" + str(year) + month + "*.nc"  'Directory Path and wildcard syntx for the srad NC File'
     srad_NC = glob.glob(dirPath_Name)
 
@@ -2809,7 +2808,7 @@ def calc_sRad_MJM2Day(month, year)
     del srad_dayl_np
 
 
-    print "Successfully calculated the Short Wave Radiation Conversion to 'MJ/m2/day' - function 'calc_ShortWaveRad_MJM2Day'
+    print "Successfully calculated the Short Wave Radiation Conversion to 'MJ/m2/day' - function 'calc_ShortWaveRad_MJM2Day"
     return sRad_np
 
 #Function caculates Gamma
@@ -2947,7 +2946,7 @@ def calc_saturation_vapor_pressure(temp_NP): #This is being used to derive the E
 
         return Es_np #kpa
 
-     except:
+    except:
         messageTime = timeFun()
         print "Error Function 'calc_saturation_vapor_pressure_Ea' - " + messageTime
         traceback.print_exc(file=sys.stdout)
@@ -2983,7 +2982,7 @@ def calc_Es(month, year): #Derived 20180803
     del Es_tmax_np
     del Es_tmin_np
 
-    'Derive the division array
+    #Derive the division array
     np_2 = Es_tmin_Es_tmax_np
     np_2[np_2 > -1000000] = 2.0
 
@@ -2996,21 +2995,21 @@ def calc_Es(month, year): #Derived 20180803
 
 #Step 11 - Actual vapor pressure (ea) derived with relative humidity data
 #Derive Ea:Step 11- Calc Penmann Step by Step. Ea = (e(Tmin)[RHmax/100] + e(Tmax)[RHmin/100])/2
-def calc_Ea(month, year)
+def calc_Ea(month, year):
     try:
 
 
-        'Derive Relative Humdity RH = vp from daymet / SVP
+        #Derive Relative Humdity RH = vp from daymet / SVP
         rh_np = calc_Rh(month,year)
 
         ######################################
         #Derive Top Left : e(Tmin)[RHmax/100])
 
-        'Derived Relative Humdity at Tmax - RHmax'
+        #Derived Relative Humdity at Tmax - RHmax'
         rhTmax_np = calc_RhTmax(month, year)
 
 
-        'Create Array with value of 100
+        #Create Array with value of 100
         Array100_np = rhTmax_np
         Array100_np[Array100_np > -1000000] = 100.0
 
@@ -3019,14 +3018,14 @@ def calc_Ea(month, year)
         del Array100_np
 
 
-        'Derive the eTMIN'
+        #Derive the eTMIN'
         dirPath_Name = tminDir + "\\*MonthlyAvg_" + str(year) + month + "*.nc"  'Directory Path and wildcard syntx for the Vapour Pressure NC File'
         tmin_NC = glob.glob(dirPath_Name)
         tmin_np = raster2array(tmin_NC[0])
         Etmin_np = calc_saturation_vapor_pressure(tmin_np)
         del tmin_np
 
-        'Derive: etmin * (RHmax/100)
+        #Derive: etmin * (RHmax/100)
         topLeft_np = np.multiply(Etmin_np, rhmax_div100_np)
         del Etmin_np
         del rhmax_div100_np
@@ -3090,13 +3089,13 @@ def calc_Ea(month, year)
 
 
 
-'Derive svp for Humdity Calculation at Tmax - Following  Thoma Equation Excel Spreadsheet (P9)
-'SVP =610.7*10^(7.5*Tmax/(237.3+Tmax)))Tmax temps from a single day.
-def calc_svpTmax_forHumdity (month, year)
+#Derive svp for Humdity Calculation at Tmax - Following  Thoma Equation Excel Spreadsheet (P9)
+#SVP =610.7*10^(7.5*Tmax/(237.3+Tmax)))Tmax temps from a single day.
+def calc_svpTmax_forHumdity (month, year):
 
     try:
 
-        '1.Define the Tmax dataset value'
+        #1.Define the Tmax dataset value'
         dirPath_Name = tmax + "\\*MonthlyAvg_" + str(year) + month + "*.nc"  'Directory Path and wildcard syntx for the Vapour Pressure NC File'
         tmax_NC = glob.glob(dirPath_Name)
         tmax_np = raster2array(tmax_NC[0])
@@ -3150,13 +3149,13 @@ def calc_svpTmax_forHumdity (month, year)
         sys.exit()
 
 
-'Derive svp for Humdity Calculation at Tmin - Following  Thoma Equation Excel Spreadsheet (P9)
-'SVP =610.7*10^(7.5*Tmin/(237.3+Tmin)))Tmin temps from a single day.
-def calc_svpTmin_forHumdity (month, year)
+#Derive svp for Humdity Calculation at Tmin - Following  Thoma Equation Excel Spreadsheet (P9)
+#SVP =610.7*10^(7.5*Tmin/(237.3+Tmin)))Tmin temps from a single day.
+def calc_svpTmin_forHumdity (month, year):
 
     try:
 
-        '1.Define the Tmin dataset value'
+        #1.Define the Tmin dataset value'
         dirPath_Name = tmin + "\\*MonthlyAvg_" + str(year) + month + "*.nc"  'Directory Path and wildcard syntx for the Vapour Pressure NC File'
         tmin_NC = glob.glob(dirPath_Name)
         tmin_np = raster2array(tmin_NC[0])
@@ -3208,14 +3207,14 @@ def calc_svpTmin_forHumdity (month, year)
         traceback.print_exc(file=sys.stdout)
         sys.exit()
 
-'Function: Derives Relative Humidity at the TMax temperature'
-'Relative Humdity RH = vp from daymet / SVP
-'vp: Daymat Vapour Pressure / 1000 = kpa'
-def calc_RhTmax(month, year)
+#Function: Derives Relative Humidity at the TMax temperature'
+#Relative Humdity RH = vp from daymet / SVP
+#vp: Daymat Vapour Pressure / 1000 = kpa'
+def calc_RhTmax(month, year):
 
     try:
 
-        'Derive svp for Humdity at Tmax' - Following Thoma Penman Excel Equation (P9)
+        #Derive svp for Humdity at Tmax' - Following Thoma Penman Excel Equation (P9)
         svpTmax_np = calc_svpTmax_forHumdity(month, year)
 
         #Daymet VP (Water Vapor Pressure (PA) converted to (KPA)
@@ -3226,7 +3225,7 @@ def calc_RhTmax(month, year)
         del svpTmax_np
 
 
-    return rhTmax_np
+        return rhTmax_np
 
     except:
         messageTime = timeFun()
@@ -3235,14 +3234,14 @@ def calc_RhTmax(month, year)
         sys.exit()
 
 
-'Function: Derives Relative Humidity at the TMin temperature'
-'Relative Humdity RH = vp from daymet / SVP
-'vp: Daymat Vapour Pressure / 1000 = kpa'
-def calc_RhTmin(month, year)
+#Function: Derives Relative Humidity at the TMin temperature'
+#Relative Humdity RH = vp from daymet / SVP
+#vp: Daymet Vapour Pressure / 1000 = kpa'
+def calc_RhTmin(month, year):
 
     try:
 
-        'Derive svp for Humdity at Tmin' - Following Thoma Penman Excel Equation (P9)
+        #Derive svp for Humdity at Tmin' - Following Thoma Penman Excel Equation (P9)
         svpTmin_np = calc_svpTmin_forHumdity(month, year)
 
         #Daymet VP (Water Vapor Pressure (PA) converted to (KPA)
@@ -3253,7 +3252,7 @@ def calc_RhTmin(month, year)
         del svpTmin_np
 
 
-    return rhTmax_np
+        return rhTmax_np
 
     except:
         messageTime = timeFun()
@@ -3262,24 +3261,33 @@ def calc_RhTmin(month, year)
         sys.exit()
 
 #Function calculates the Water Vapour Pressure from Daymet (Pa) to unit (Kpa).
-def calc_vp_kpa(month, year)
+def calc_vp_kpa(month, year):
 
-    dirPath_Name = vpDir + "\\*MonthlyAvg_" + str(year) + month + "*.nc"  'Directory Path and wildcard syntx for the Vapour Pressure NC File'
-    vp_NC = glob.glob(dirPath_Name)
+    try:
 
-    vp_np = raster2array(vp_NC[0])
+        dirPath_Name = vpDir + "\\*MonthlyAvg_" + str(year) + month + "*.nc"  'Directory Path and wildcard syntx for the Vapour Pressure NC File'
+        vp_NC = glob.glob(dirPath_Name)
 
-    #Create a 1000.0 Array
-    Array_1000_np = raster2array(vp_NC[0])
-    Array_1000_np[Array_1000_np > -1000000] = 1000.0
+        vp_np = raster2array(vp_NC[0])
+
+        #Create a 1000.0 Array
+        Array_1000_np = raster2array(vp_NC[0])
+        Array_1000_np[Array_1000_np > -1000000] = 1000.0
 
 
-    #Derive the Vp array in unit Kpa
-    vp_kpa_np = np.divide(vp_np, Array_1000_np)
-    del vp_np
-    del Array_1000_np
+        #Derive the Vp array in unit Kpa
+        vp_kpa_np = np.divide(vp_np, Array_1000_np)
+        del vp_np
+        del Array_1000_np
 
-return vp_kpa_np
+        return vp_kpa_np
+
+
+    except:
+        messageTime = timeFun()
+        print "Error calc_RhTmax function - " + messageTime
+        traceback.print_exc(file=sys.stdout)
+        sys.exit()
 
 #Function define the dataset Path for the variable of interest
 #inDir - Directory with the variable datasets
@@ -3287,7 +3295,7 @@ return vp_kpa_np
 #year - year being processed
 #month - month being processed
 #suffix - wild card syntax for file name suffix (e.g "*.nc", "*.tif"
-def funPathName_dataset(inDir, prefix, year, month, suffix)
+def funPathName_dataset(inDir, prefix, year, month, suffix):
 
     outPath = inDir + prfix + str(year) + month + suffix
 
