@@ -1799,12 +1799,28 @@ def Penman_Montieth(year, month):
         print "Successfully finished function 'Penman_topTerm' - " + " - " + messageTime
 
 
-        #Derive the Penman Bottom Right Term: (1 + wind_correction) * gamma
-        Penman_bottomRight_np= Penman_bottomRightTerm(u2_np, gamma_np)
+        #Derive the Penman Bottom Right Term: gamma *(1 + wind_correction)
+        penman_bottomRightTerm_np = Penman_bottomRightTerm(u2_np, gamma_np)
+        messageTime = timeFun()
+        print "Successfully finished function 'Penman_bottomRightTerm' - " + " - " + messageTime
 
+        #Derive overall Bottom term delta + gamma *(1 + wind_correction)
+        penman_bottomTerm_np = Penman_bottomTerm(delta_np, penman_bottomRightTerm_np)
+        messageTime = timeFun()
+        print "Successfully finished function 'Penman_bottomTerm' - " + " - " + messageTime
 
+        #Derive overall Penman-Monteith ET Equation:  (Penman_topTerm_np/penman_bottomTerm_np)
+        penman_Eto_np = Penman_FullTerm(Penman_topTerm_np, penman_bottomTerm_np)
+        messageTime = timeFun()
+        print "Successfully finished function 'Penman_FullTerm' - " + " - " + messageTime
 
-        #Stopped here - 20180726 - KRS
+        #Export the Penman-Monteith Eto Array
+        outPenmanEto = outDir + "\\Penman_Eto_" + str(year) + "_" + month + ".tif"
+
+        #Export penman_Eto_np Array to a Raster
+        array2raster(monthlyTempMean[0],outPenmanEto, penman_Eto_np)
+        messageTime = timeFun()
+        print ("Derived Penman Eto (for year/month - " + str(year) + "_" + month + " - " + outPenmanEto + " - " + messageTime)
 
 
 
@@ -1822,7 +1838,7 @@ def Penman_topLeft(monthlyRadiation, year, month):
     try:
 
         #Derive Delta - Completed Feb 2018
-        out_Delta_np = Penman_Delta(year, month)
+        out_Delta_np = calc_Delta(year, month)
 
         #Derive Inverse Relative Distance - Using the mid Month Day value - Completed 2018/7/6
         inverse_rel_distance = calc_inverse_rel_distance(month)
@@ -1999,8 +2015,8 @@ def Penman_topRight(year, month)
 
 
         #########Stoped here 20180810
-
-        #Derive the wind speed at 2m height, set to 2 m/s by defaul - David did you do this in Row U in your worksheet?  Seems to be an incrementation number
+        #####Currently setting the default wind speed value to 2 m/s - KRS 20180824
+        #Derive the wind speed at 2m height, set to 2 m/s by default - David did you do this in Row U in your worksheet?  Seems to be an incrementation number
         u2_np = Es_minus_Ea_np
         #Create Raster with value 2 every where
         u2_np[u2_np > -100000] = 2.0
@@ -2042,22 +2058,77 @@ def Penman_topTerm(Penman_topLeft_np, Penman_topMiddle_np, Penman_topRight_np)
         sys.exit()
 
 #Derives the Penman Bottom Right Term: (1 + wind_correction) * gamma
+# Wind Correction = 0.34 * u2 (i.e. wind speed)
 def  Penman_bottomRightTerm(u2_np, gamma_np)
 
     try:
-        #Final Calcu
+        #Derive the wind correction value (0.34 * u2)
+        #Create array with 0.34
+        pt34_np = u2_np
+        #Create Raster with value 2 every where
+        pt34_np[pt34_np > -100000] = 0.34
 
 
+        #Derived wind correction value
+        windCorretion_np = np.multiply(pt34_np, u2_np)
+        del pt34_np
+        del u2_np
 
+        #Create array with 1.0
+        One_np = windCorretion_np
+        #Create Raster with value 2 every where
+        One_np[One_np > -100000] = 1.0
 
+        #Derive (1 + wind_correction)
+        one_windCorrection_np = np.add(One_np, windCorretion_np)
+        del One_np
+        del windCorretion_np
 
+        #Derive (1 + wind_correction) * gamma
+        penman_bottomRightTerm_np = np.multipy(one_windCorrection_np, gamma_np)
+        del one_windCorrection_np
+        del gamma_np
 
-
-        return Penman_bottomRightTerm_np
+        return penman_bottomRightTerm_np
 
     except:
         messageTime = timeFun()
         print "Error Function 'Penman_bottomRightTerm' - " + messageTime
+        traceback.print_exc(file=sys.stdout)
+        sys.exit()
+
+
+#Derive overall Bottom term: delta + gamma *(1 + wind_correction)
+def  Penman_bottomTerm(delta_np, penman_bottomRightTerm_np)
+
+    try:
+
+        penman_bottomTerm_np = np.multipy(delta_np, penman_bottomRightTerm_np)
+        del delta_np
+        del penman_bottomRightTerm_np
+
+        return penman_bottomTerm_np
+
+    except:
+        messageTime = timeFun()
+        print "Error Function 'Penman_bottomTerm' - " + messageTime
+        traceback.print_exc(file=sys.stdout)
+        sys.exit()
+
+#Derive overall Penman-Monteith ET Equation:
+def Penman_FullTerm(Penman_topTerm_np, penman_bottomTerm_np)
+
+    try:
+
+        penman_Eto_np = np.division(Penman_topTerm_np, penman_bottomTerm_np)
+        del Penman_topTerm_np
+        del penman_bottomTerm_np
+
+        return penman_Eto_np
+
+    except:
+        messageTime = timeFun()
+        print "Error Function 'Penman_FullTerm' - " + messageTime
         traceback.print_exc(file=sys.stdout)
         sys.exit()
 
@@ -2115,7 +2186,7 @@ def checkNextMonth(year, month)
     return outNextMonth
 
 
-def Penman_Delta(year, month): #CHECKS OK
+def calc_Delta(year, month): #CHECKS OK
     #Slope of the vapor pressure curve
     # t is AVERAGE air temperature in degrees C
     # Equation 13 in FAO doc (http://www.fao.org/docrep/X0490E/x0490e06.htm#TopOfPage)
@@ -2219,7 +2290,7 @@ def Penman_Delta(year, month): #CHECKS OK
     #D = top_term/bottom_term
     #########################
 
-    delta_NP = np.divide(topterm_NP,bottom_term_NP)
+    delta_np = np.divide(topterm_NP,bottom_term_NP)
 
 
     outDelta = outDir + "\\Penman_Delta_" + str(year) + "_" + month + ".tif"
@@ -2228,7 +2299,7 @@ def Penman_Delta(year, month): #CHECKS OK
     array2raster(monthlyTempMean[0],outDelta, delta_NP)
     messageTime = timeFun()
     print ("Derived Penman Delta ( for year/month - " + str(year) + "_" + month + " - " + outSatVapPressure + " - " + messageTime)
-    del delta_NP
+
 
 
     return outDelta
