@@ -1,7 +1,7 @@
 # ---------------------------------------------------------------------------
-# Last Edited: 20170709
+# Last Edited: 20180824
 #
-# SpatialWaterBalance_Hamon_and_Penman_ET_{Date}.py
+# SpatialWaterBalance_Hamon_and_Penman_ET.py
 # Created on: 2018-xx-xx
 # Description:  Script runs a monthly water balance model following
 # logic defined in Lutz et. al 2010 and Dilts et. al 2015 Journal of Biogreography.
@@ -34,12 +34,12 @@ endYear = 2007      ##End Year of Processing
 snapRaster = r'D:\ROMN\working\WaterBalance\GRSA\GIS\GRSA_10km_AWS_0_150cm_Infill_100mm.tif'   #Raster for which output products will be snapped to
 outCellSize = 10    #Output cell size for final parameters
 
-
+#Hamon ET variables Mean Temp and Precip Variable only
 tmeanDir = r'E:\SWB\GRSA\PRISM_2000_2016\TMEAN\Resampled'    ##Directory with the tmean variables to be used (e.g. 30 year normals 1981-2010 - 800m)
 pptDir = r'E:\SWB\GRSA\PRISM_2000_2016\PPT\Resampled'        ##Directory with the PRISM ppt variables to be used (e.g. 30 year normals 1981-2010 - 800m)
-septSnowPack = r'D:\ROMN\working\WaterBalance\GRSA\GIS\Sept_SnowPack_AllZero.tif'  ##Raster with default September Snow Pack for first year of processing - assumption is no snowpack at end of water year
 
-#Penmon-Monteith ET varibales (Daymet- NetCDF)
+
+#Penmon-Monteith ET variables (Daymet- NetCDF)
 tmaxDir = r'E:\Daymet\GRSA\tmax'       ##Directory with the tmax variables
 tminDir = r''       ##Directory with the tmin variables
 vpDir = r''         ##Direcotry with the vapour pressure variables
@@ -49,6 +49,8 @@ dayl = r'E:\Daymet\GRSA\dayl'          ##Directory with the Day Length variables
 heatLoadIndex = "Yes"       ##Switch ("Yes"|"No") defining if Heat Load Index (Topographic Factors Slope and Aspect Included in Potential Evopotranspiration Calculation (See Eq 16 Dilts et. al. 2015 Biogeography)
 etEquation = "Penman-Monteith"  ##Switch ("Hamon"|"Penman-Monteith") defining if the Evapotranspiration Equation to be used.
 rasterHeatLoad = "N/A"       ##Switch("Dir Path"|"N/A") Optinal variable to define a previously derived Heat Load Index.  If set to "N/A" script will derive using Aspect, Slope and Latitude Inputs
+#Misc Input Data Sets
+septSnowPack = r'D:\ROMN\working\WaterBalance\GRSA\GIS\Sept_SnowPack_AllZero.tif'  ##Raster with default September Snow Pack for first year of processing - assumption is no snowpack at end of water year
 latitude = r'D:\ROMN\working\WaterBalance\GRSA\GIS\Latitude_GRSA.tif' ##Raster with Latitude values (GCS) for the AOA (Not used if Daymet Daylegnth is being used, Match cell size and snap to input climatic variables.
 aspectRas = r'D:\ROMN\working\WaterBalance\GRSA\GIS\aspect_albers_GRSA_10km.tif'#Aspect Raster
 slopeRas = r'D:\ROMN\working\WaterBalance\GRSA\GIS\slope_albers_GRSA_10km.tif' #Slope Raster
@@ -2103,9 +2105,13 @@ def  Penman_bottomTerm(delta_np, penman_bottomRightTerm_np)
 
     try:
 
-        penman_bottomTerm_np = np.multipy(delta_np, penman_bottomRightTerm_np)
+        penman_bottomTerm_Initial = np.multipy(delta_np, penman_bottomRightTerm_np)
         del delta_np
         del penman_bottomRightTerm_np
+
+        #Set any Eto values less than zero to zero
+        penman_bottomTerm_np = np.where(penman_bottomTerm_Initial < 0, 0, penman_bottomTerm_Initial)
+        del penman_bottomTerm_Initial
 
         return penman_bottomTerm_np
 
