@@ -40,6 +40,7 @@ pptDir = r'E:\SWB\GRSA\PRISM_2000_2016\PPT\Resampled'        ##Directory with th
 
 
 #Penmon-Monteith ET variables (Daymet- NetCDF)
+pptDir = r'E:\Daymet\GRSA\prcp'         ##Directory with the ppt variables
 tmaxDir = r'E:\Daymet\GRSA\tmax'       ##Directory with the tmax variables
 tminDir = r'E:\Daymet\GRSA\tmin'       ##Directory with the tmin variables
 vpDir = r'E:\Daymet\GRSA\vp'         ##Direcotry with the vapour pressure variables
@@ -131,17 +132,30 @@ def main():
                 if month not in ["10","11","12"]:
                     year = year + 1
 
-                wildCard = "\\*" + str(year) + "*" + month + "*.tif"
-                monthlyTempMean = glob.glob(tmeanDir + wildCard)
-                monthlyPrecip = glob.glob(pptDir + wildCard)
-                if len(monthlyTempMean)!= 1 and len(monthlyPrecip)!= 1:
-                    messageTime = timeFun()
-                    scriptMsg = "Error processing month - " + wildCard + " - Monthly TempMean or Precip Raster Missing/or >1 - " + messageTime
-                    print scriptMsg
-                    logFile = open(logFileName, "a")
-                    logFile.write(scriptMsg + "\n")
-                    logFile.close()
-                    exit()
+                #Define the tmin path
+                dirPath_Name = tminDir + "\\*MonthlyAvg_" + str(year) + month + "*.nc"  #Directory Path and wildcard syntx for the srad NC File'
+                tmin_NC = glob.glob(dirPath_Name)
+
+                #Create the tmin array
+                tmin_np = raster2array(tmin_NC[0])
+
+                #Define the tmax path
+                dirPath_Name = tmaxDir + "\\*MonthlyAvg_" + str(year) + month + "*.nc"  #Directory Path and wildcard syntx for the srad NC File'
+                tmax_NC = glob.glob(dirPath_Name)
+
+                #Create the tmax array
+                tmax_np = raster2array(tmax_NC[0])
+
+                #Derive the avgTemp dataset
+                monthlyTempMean = calc_avgTemp(tmin_np, tmax_np)
+
+
+                #Define the month precip
+                dirPath_Name = pptDir + "\\*MonthlyTotal_" + str(year) + month + "*.nc"  #Directory Path and wildcard syntx for the srad NC File'
+                ppt_NC = glob.glob(dirPath_Name)
+
+                #Create the tmax array
+                monthlyPrecip = raster2array(ppt_NC[0])
 
                 #Create Monthly Melt Factors, Rain and Snow Fractions
                 out1 = meltFactorRainSnow(monthlyTempMean, monthlyPrecip, month, year)
@@ -412,7 +426,7 @@ def meltFactorRainSnow(monthlyTempMean, monthlyPrecip, month, year):
         outMeltFactor = outDir + "\\MealtFactor_" + str(year) + "_" + month + ".tif"
 
         #Define Numpy Array
-        meltFactor = raster2array(monthlyTempMean[0])
+        meltFactor = monthlyTempMean
 
         outArraySize = meltFactor.shape
         #Index values between 0 and 6
@@ -426,7 +440,7 @@ def meltFactorRainSnow(monthlyTempMean, monthlyPrecip, month, year):
 
 
         #Export array to raster
-        array2raster(monthlyTempMean[0],outMeltFactor,meltFactor)
+        array2raster(soilAWS,outMeltFactor,meltFactor)
         messageTime = timeFun()
         print ("Derived Melt Factor for Year/Month - " + str(year) + "_" + month + " - " + outMeltFactor + " - " + messageTime)
 
@@ -435,28 +449,25 @@ def meltFactorRainSnow(monthlyTempMean, monthlyPrecip, month, year):
         ############################
         outRainFrac = outDir + "\\Rain_" + str(year) + "_" + month + ".tif"
 
-        #Define Numpy Array
-        monPrecip = raster2array(monthlyPrecip[0])
-
         #Multiply Arrays
-        rainFraction = np.multiply(meltFactor, monPrecip)
+        rainFraction = np.multiply(meltFactor, monthlyPrecip)
         rainFraction[rainFraction <0]= np.NaN
         del meltFactor
 
         #Export array to raster
-        array2raster(monthlyPrecip[0], outRainFrac, rainFraction)
+        array2raster(soilAWS, outRainFrac, rainFraction)
         del rainFraction
 
         messageTime = timeFun()
         print ("Derived Rain Fraction for Year/Month - " + str(year) + "_" + month + " - " + outRainFrac + " - " + messageTime)
 
         ############################
-        #Equation 5 - Snow Fractions (snowFraction = ((1- Raster(outMeltFactor)) * Raster(monthlyPrecip[0])))
+        #Equation 5 - Snow Fractions (snowFraction = ((1- Raster(outMeltFactor)) * Raster(monthlyPrecip)))
         ############################
 
         outSnowFrac = outDir + "\\Snow_" + str(year) + "_" + month + ".tif"
 
-        snowFrac1 = raster2array(monthlyTempMean[0])
+        snowFrac1 = monthlyTempMean
         #Create Raster with value 1 every where
         snowFrac1[snowFrac1 > -999] = 1.0
 
@@ -465,13 +476,13 @@ def meltFactorRainSnow(monthlyTempMean, monthlyPrecip, month, year):
         snowFrac2 = np.subtract(snowFrac1, outMeltFactor_NP)
         del snowFrac1
 
-        #Caclulate: (1- Raster(outMeltFactor)) * Raster(monthlyPrecip[0])
-        snowFrac3 = np.multiply(snowFrac2, monPrecip)
+        #Caclulate: (1- Raster(outMeltFactor)) * Raster(monthlyPrecip)
+        snowFrac3 = np.multiply(snowFrac2, monthlyPrecip)
         del snowFrac2
-        del monPrecip
+        del monthlyPrecip
 
         #Export Monthly Snow
-        array2raster(monthlyPrecip[0], outSnowFrac, snowFrac3)
+        array2raster(soilAWS, outSnowFrac, snowFrac3)
         del snowFrac3
         messageTime = timeFun()
         print ("Derived Snow Fraction for Year/Month - " + str(year) + "_" + month + " - " + outSnowFrac + " - " + messageTime)
@@ -2312,129 +2323,141 @@ def calc_Delta(year, month): #CHECKS OK
 #Function calculate the average temperature using the Tmax and Tmin' (tmax + tmin)/2) (KRS 20180122 Finished)
 def calc_avgTemp(tmin_np, tmax_np):
 
+    try:
+        addTminTmax_NP = np.add(tmin_np, tmax_np)
+        del tmin_np
+        del tmax_np
 
-    addTminTmax_NP = np.add(tmin_np, tmax_np)
-    del tmin_np
-    del tmin_np
+        divide_2_NP = addTminTmax_NP
+        #Create Raster with value 2 every where
+        divide_2_NP[divide_2_NP > -999] = 2
 
-    divide_2_NP = addTminTmax_NP
-    #Create Raster with value 2 every where
-    divide_2_NP[divide_2_NP > -999] = 2
+        #Derive the tavg
+        avgTemp_np = np.divide(addTminTmax_NP, divide_2_NP)
 
-    #Derive the tavg
-    avgTemp = np.divide(ddTminTmax_NP, divide_2_NP)
+        del addTminTmax_NP
+        del divide_2_NP
 
-    del addTminTmax_NP
-    del divide_2_NP
+        return avgTemp_np
 
-    return avgTemp_np
+    except:
+        messageTime = timeFun()
+        print "Error 'calc_avgTemp' function - " + messageTime
+        traceback.print_exc(file=sys.stdout)
+        sys.exit()
 
 #Derive monthly Soil Heat Flux Density (G - (MJ/m2/day)) using equations 43 when (Tmonth i+1 is known (i.e. next monthly average temp is available)
 #Gmonth, i = 0.07 (Tmonth, i+1 - Tmonth, i-1) (43)
 def calc_G_nextMonthKnown(year, month):
 
-    monthList = ["10","11","12","01","02","03","04","05","06","07","08","09"]
 
-    #####################
-    #Calculate Tmonth,i+1 (i.e. Average temp of next Month)
-    monthIndex = monthList.index(month)
+    try:
+        monthList = ["10","11","12","01","02","03","04","05","06","07","08","09"]
 
-    #Define monthly index, is September restart at beginning of index
-    if monthIndex == 11:
-        monthIndex_plus1 = 0
+        #####################
+        #Calculate Tmonth,i+1 (i.e. Average temp of next Month)
+        monthIndex = monthList.index(month)
 
-    else:
-        monthIndex_plus1 = monthIndex + 1
+        #Define monthly index, is September restart at beginning of index
+        if monthIndex == 11:
+            monthIndex_plus1 = 0
 
-    #Define the Month + 1 value (i.e the plus one month value)
-    month_iplus1 = monthList[monthIndex_plus1]
+        else:
+            monthIndex_plus1 = monthIndex + 1
 
-    #Define the Year + 1 value (i.e the Year plus 1 month value.  If 'month' = 12 this will be 'year' + 1, else 'year')
-    if year == 12:
-        year_iplus1 = year + 1
-    else:
+        #Define the Month + 1 value (i.e the plus one month value)
+        month_iplus1 = monthList[monthIndex_plus1]
 
-        year_iplus1 = year
+        #Define the Year + 1 value (i.e the Year plus 1 month value.  If 'month' = 12 this will be 'year' + 1, else 'year')
+        if year == 12:
+            year_iplus1 = year + 1
+        else:
 
-
-    dirPath_Name = tmin + "\\*MonthlyAvg_" + str(year_iplus1) + month_iplus1 + "*.nc"  'Directory Path and wildcard syntx for the srad NC File'
-    tmin_NC = glob.glob(dirPath_Name)
-
-    #Create the tmin array
-    tmin_np = raster2array(tmin_NC[0])
+            year_iplus1 = year
 
 
-    dirPath_Name = tmax + "\\*MonthlyAvg_" + str(year_iplus1) + month_iplus1 + "*.nc"  'Directory Path and wildcard syntx for the srad NC File'
-    tmax_NC = glob.glob(dirPath_Name)
+        dirPath_Name = tmin + "\\*MonthlyAvg_" + str(year_iplus1) + month_iplus1 + "*.nc"  'Directory Path and wildcard syntx for the srad NC File'
+        tmin_NC = glob.glob(dirPath_Name)
 
-    #Create the tmax array
-    tmax_np = raster2array(tmax_NC[0])
-
-    Tmonth_iplus1_np = calc_avgTemp(tmin_np, tmax_np)
-    del tmin_np
-    del tmax_np
-    #####################
+        #Create the tmin array
+        tmin_np = raster2array(tmin_NC[0])
 
 
+        dirPath_Name = tmax + "\\*MonthlyAvg_" + str(year_iplus1) + month_iplus1 + "*.nc"  'Directory Path and wildcard syntx for the srad NC File'
+        tmax_NC = glob.glob(dirPath_Name)
 
-    #####################
-    #Calculate Tmonth,i-1 (i.e. Average temp of previous Month)
-    monthIndex = monthList.index(month)
+        #Create the tmax array
+        tmax_np = raster2array(tmax_NC[0])
 
-    #Define monthly index, is October restart at end of List (i.e September
-    if monthIndex == 10:
-        monthIndex_minus1 = 11
-
-    else:
-        monthIndex_minus1 = monthIndex - 1
-
-    #Define the Month - 1 value (i.e the previous month value)
-    month_iminus1 = monthList[monthIndex_minus1]
-
-    #Define the Year + 1 value (i.e the Year plus 1 month value.  If 'month' = 12 this will be 'year' + 1, else 'year')
-    if year == 01:
-        year_iminus1 = year - 1
-    else:
-        year_iminus1 = year
+        Tmonth_iplus1_np = calc_avgTemp(tmin_np, tmax_np)
+        del tmin_np
+        del tmax_np
+        #####################
 
 
-    dirPath_Name = tmin + "\\*MonthlyAvg_" + str(year_iminus1) + month_iminus1 + "*.nc"  'Directory Path and wildcard syntx for the srad NC File'
-    tmin_NC = glob.glob(dirPath_Name)
 
-    #Create the tmin array
-    tmin_np = raster2array(tmin_NC[0])
+        #####################
+        #Calculate Tmonth,i-1 (i.e. Average temp of previous Month)
+        monthIndex = monthList.index(month)
 
+        #Define monthly index, is October restart at end of List (i.e September
+        if monthIndex == 10:
+            monthIndex_minus1 = 11
 
-    dirPath_Name = tmax + "\\*MonthlyAvg_" + str(year_iminus1) + month_iminus1 + "*.nc"  'Directory Path and wildcard syntx for the srad NC File'
-    tmax_NC = glob.glob(dirPath_Name)
+        else:
+            monthIndex_minus1 = monthIndex - 1
 
-    #Create the tmax array
-    tmax_np = raster2array(tmax_NC[0])
+        #Define the Month - 1 value (i.e the previous month value)
+        month_iminus1 = monthList[monthIndex_minus1]
 
-    Tmonth_iminus_np = calc_avgTemp(tmin_np, tmax_np)
-    del tmin_np
-    del tmax_np
-    #####################
-
-    #Calc - Tmonth_iplus1_np - Tmonth_iminus_np
-    right_Side_np = np.subtract(Tmonth_iplus1_np, Tmonth_iminus_np)
-    del Tmonth_iplus1_np
-    del Tmonth_iminus_np
-
-    #Derive the 0.07 array
-    pt07_np = right_Side_np
-    pt07_np[pt07_np > -1000000] = 0.07
-
-    #Derived 0.07 x (Tmonth_iplus1_np - Tmonth_iminus_np)
-
-    G_np = np.multiply(pt07_np, right_Side_np)
-    del pt07_np
-    del right_Side_np
+        #Define the Year + 1 value (i.e the Year plus 1 month value.  If 'month' = 12 this will be 'year' + 1, else 'year')
+        if year == 01:
+            year_iminus1 = year - 1
+        else:
+            year_iminus1 = year
 
 
-    return G_np
+        dirPath_Name = tmin + "\\*MonthlyAvg_" + str(year_iminus1) + month_iminus1 + "*.nc"  'Directory Path and wildcard syntx for the srad NC File'
+        tmin_NC = glob.glob(dirPath_Name)
+
+        #Create the tmin array
+        tmin_np = raster2array(tmin_NC[0])
 
 
+        dirPath_Name = tmax + "\\*MonthlyAvg_" + str(year_iminus1) + month_iminus1 + "*.nc"  'Directory Path and wildcard syntx for the srad NC File'
+        tmax_NC = glob.glob(dirPath_Name)
+
+        #Create the tmax array
+        tmax_np = raster2array(tmax_NC[0])
+
+        Tmonth_iminus_np = calc_avgTemp(tmin_np, tmax_np)
+        del tmin_np
+        del tmax_np
+        #####################
+
+        #Calc - Tmonth_iplus1_np - Tmonth_iminus_np
+        right_Side_np = np.subtract(Tmonth_iplus1_np, Tmonth_iminus_np)
+        del Tmonth_iplus1_np
+        del Tmonth_iminus_np
+
+        #Derive the 0.07 array
+        pt07_np = right_Side_np
+        pt07_np[pt07_np > -1000000] = 0.07
+
+        #Derived 0.07 x (Tmonth_iplus1_np - Tmonth_iminus_np)
+
+        G_np = np.multiply(pt07_np, right_Side_np)
+        del pt07_np
+        del right_Side_np
+
+
+        return G_np
+
+    except:
+        messageTime = timeFun()
+        print "Error 'calc_G_nextMonthKnown' function - " + messageTime
+        traceback.print_exc(file=sys.stdout)
+        sys.exit()
 
 #Derive monthly Soil Heat Flux Density (G - (MJ/m2/day)) using equations 44 when (Tmonth i+1 is Unknown (i.e. next monthly average temp is NOT available)
 #Gmonth, i = 0.14 (Tmonth, i - Tmonth, i-1) (44)
