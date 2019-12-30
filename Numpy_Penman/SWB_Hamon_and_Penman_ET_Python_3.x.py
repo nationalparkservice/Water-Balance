@@ -40,12 +40,12 @@ pptDir = r'E:\SWB\GRSA\PRISM_2000_2016\PPT\Resampled'        ##Directory with th
 
 
 #Penmon-Monteith ET variables (Daymet- NetCDF)
-pptDir = r'G:\Daymet\Conus\Monthly\tif\prcp\GRSA\10m'         ##Directory with the ppt variables
-tmaxDir = r'G:\Daymet\Conus\Monthly\tif\tmax\GRSA\10m'       ##Directory with the tmax variables
-tminDir = r'G:\Daymet\Conus\Monthly\tif\tmin\GRSA\10m'       ##Directory with the tmin variables
-vpDir = r'G:\Daymet\Conus\Monthly\tif\vp\GRSA\10m'         ##Direcotry with the vapour pressure variables
-sRad = r'G:\Daymet\Conus\Monthly\tif\srad\GRSA\10m'          ##Direcotry with the Solar Radiation variables (note Daymet sRad unit is W/m2)
-dayl = r'E:\Daymet\GRSA\dayl'          ##Directory with the Day Length variables
+pptDir = r'F:\Daymet\Conus\Monthly\tif\prcp\GRSA\10m'         ##Directory with the ppt variables
+tmaxDir = r'F:\Daymet\Conus\Monthly\tif\tmax\GRSA\10m'       ##Directory with the tmax variables
+tminDir = r'F:\Daymet\Conus\Monthly\tif\tmin\GRSA\10m'       ##Directory with the tmin variables .tif files preprocessed to 10m
+vpDir = r'F:\Daymet\Conus\Monthly\tif\vp\GRSA\10m'         ##Direcotry with the vapour pressure variables
+sRad = r'F:\Daymet\Conus\Monthly\tif\srad\GRSA\10m'          ##Direcotry with the Solar Radiation variables (note Daymet sRad unit is W/m2)
+dayl = r'F:\Daymet\GRSA\dayl'          ##Directory with the Day Length variables
 
 heatLoadIndex = "Yes"       ##Switch ("Yes"|"No") defining if Heat Load Index (Topographic Factors Slope and Aspect) should be included in PET Calculation (See Eq 16 Dilts et. al. 2015 Biogeography)
 etEquation = "Penman-Monteith"  ##Switch ("Hamon"|"Penman-Monteith") defining if the Evapotranspiration Equation to be used.
@@ -68,8 +68,8 @@ avgMonthlyDayLengthRasters = r'D:\ROMN\working\Climate\Daymet\GRSA_Average_DayLe
 dayLengthWildCard = "*Average_dayl_2010"   ##WildCard Syntax for DayLength Rasters (not used if manually derived day Length.  Month and .tif are always the end suffix - Not Appliciable if using Daymet Data and Penman-Monteith ET
 
 #Output and Workspace Parameters
-outDir = r'G:\SWB\GRSA\Penman_ET'   ## Location for output
-workspace = r'G:\SWB\GRSA\Penman_ET\workspace'      ## Workspace for Processing
+outDir = r'F:\SWB\GRSA\Penman_ET'   ## Location for output
+workspace = r'F:\SWB\GRSA\Penman_ET\workspace'      ## Workspace for Processing
 logFileName = workspace + "\AAA_GRSA_Penman_ET_logFile.txt"          ##Logfile Name
 
 #######################################
@@ -118,7 +118,6 @@ def timeFun():          #Function to Grab Time
 def main():
     try:
 
-
         yearRange = range(startYear, endYear + 1)
 
         for year in yearRange:
@@ -154,7 +153,7 @@ def main():
                 dirPath_Name = pptDir + "\\*Monttl_" + str(year) + month + "*.tif"  #Directory Path and wildcard syntx for the srad NC File'
                 ppt_NC = glob.glob(dirPath_Name)
 
-                #Create the tmax array
+                #Create the ppt array
                 monthlyPrecip = raster2array(ppt_NC[0])
 
                 #Create Monthly Melt Factors, Rain and Snow Fractions
@@ -236,9 +235,9 @@ def main():
                     elif etEquation == "Penman-Monteith":
 
                         #Need to derive the 'Penman-Monteith' ET first
-                        out_Penman = penman_Montieth(year, month)
+                        out_Penman = Penman_Montieth(year, month)
 
-                        #Need to derive the function to caluclate the PET with Penamn ET...20180119
+                        #Caluclate the PET with Penamn ET
                         out3 = petHeatLoad(avgDayLengthRas, monthSolarDec, monthlyTempMean, heatLoadIndexRas, month, year)
                         PET = out3
 
@@ -554,11 +553,10 @@ def snowMeltSnowPackWaterMonthly(meltFactor, monthlyPrecip, snowFraction, rainFr
         snowPackEq1Pow = np.power(snowPackEq1, 2)
 
         #Calculate ((1- MeltFactor) ^ 2) * monthlyPrecip[0]
-        monthlyPrecip_NP= raster2array(monthlyPrecip[0]) #Create Numpy Array for monthly precip
-        snowPackEq1Left = np.multiply(snowPackEq1Pow, monthlyPrecip_NP)
+        #monthlyPrecip_NP= raster2array(monthlyPrecip[0]) #Create Numpy Array for monthly precip
+        snowPackEq1Left = np.multiply(snowPackEq1Pow, monthlyPrecip)
         del snowPackEq1Pow
-        del monthlyPrecip_NP
-
+        #del monthlyPrecip_NP
 
         #Calculate (1-Raster(meltFactor)) * Raster(snowPackPrevious)) - Right Side of Equation
         snowPackPrevious_NP= raster2array(snowPackPrevious) #Create Numpy Array for Monthly SnowPack
@@ -1788,9 +1786,8 @@ def Penman_Montieth(year, month):
 
     try:
 
-
         #Top Left Term of FAO Penman-Monteith (0.408 Delta(Rn-G))
-        Penman_topLeft_np = Penman_topLeft(netRadiation, year, month)
+        Penman_topLeft_np = Penman_topLeft(year, month)
         messageTime = timeFun()
         print ("Successfully finished function 'Penman_topLeft' - " + " - " + messageTime)
 
@@ -1844,7 +1841,8 @@ def Penman_Montieth(year, month):
 
 
 #Top Left Term of FAO Penman-Monteith (0.408 Delta(Rn-G) - Initial Development finished 2018/07/23 - KRS
-def Penman_topLeft(monthlyRadiation, year, month):
+#QC Initial Code Complete 20191230 - KRS
+def Penman_topLeft(year, month):
 
     try:
 
@@ -1862,8 +1860,8 @@ def Penman_topLeft(monthlyRadiation, year, month):
         #Derive  Ra: extra-terrestrial radiation in MJ/m2/day. Equation 21 of Ch3 FAO doc. - Completed 2018/7/6
         Ra_NP = calc_Ra(inverse_rel_distance,sunset_hour_angle_NP,latitude,solar_declination)
 
-        #Derive N = Maximum Daylength - Completed 2018/7/6
-        N_np = calc_daylength(sunset_hour_angle_NP)
+        #Derive N = Maximum Daylength - Completed 2018/7/6 - Not being used due to function CalcRS not being used - KRS
+        #N_np = calc_daylength(sunset_hour_angle_NP)
 
         #############################
         #Derive Rs (MJ/m2/day) - Completed 2018/7/6 - I believe this is the equivalent of the Daymet sRad data product so calculaton is not necessary - KRS
@@ -2216,14 +2214,13 @@ def calc_Delta(year, month): #CHECKS OK
 ##    return D
 
 
-    dirPath_Name = tmin + "\\*MonthlyAvg_" + str(year) + month + "*.nc"  'Directory Path and wildcard syntx for the srad NC File'
+    dirPath_Name = tminDir + "\\*MonthlyAvg_" + str(year) + month + "*.nc"  'Directory Path and wildcard syntx for the srad NC File'
     tmin_NC = glob.glob(dirPath_Name)
 
     #Create the tmin array
     tmin_np = raster2array(tmin_NC[0])
 
-
-    dirPath_Name = tmax + "\\*MonthlyAvg_" + str(year) + month + "*.nc"  'Directory Path and wildcard syntx for the srad NC File'
+    dirPath_Name = tmaxDir + "\\*MonthlyAvg_" + str(year) + month + "*.nc"  'Directory Path and wildcard syntx for the srad NC File'
     tmax_NC = glob.glob(dirPath_Name)
 
     #Create the srad array
