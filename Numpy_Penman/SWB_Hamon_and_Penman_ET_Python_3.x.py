@@ -1,6 +1,7 @@
 # ---------------------------------------------------------------------------
 # Last Edited: 20190114 - Stopped 4:30 Partial Migration to Python 3.x
 #
+# Anaconda Environment - PythonDemo
 # SpatialWaterBalance_Hamon_and_Penman_ET.py
 # Created on: 2018-xx-xx
 # Description:  Script runs a monthly water balance model following
@@ -1787,6 +1788,7 @@ def Penman_Montieth(year, month):
     try:
 
         #Top Left Term of FAO Penman-Monteith (0.408 Delta(Rn-G))
+        #Started Code Debug 20191230 - KRS - Stopped Here
         Penman_topLeft_np = Penman_topLeft(year, month)
         messageTime = timeFun()
         print ("Successfully finished function 'Penman_topLeft' - " + " - " + messageTime)
@@ -1846,10 +1848,11 @@ def Penman_topLeft(year, month):
 
     try:
 
-        #Derive Delta - Completed Feb 2018
+        #Derive Delta - Debug QC Completed 20191230 - KRS
         out_Delta_np = calc_Delta(year, month)
 
         #Derive Inverse Relative Distance - Using the mid Month Day value - Completed 2018/7/6
+        #Stopped Debug QC here 20191230- KRS
         inverse_rel_distance = calc_inverse_rel_distance(month)
 
 
@@ -2200,7 +2203,7 @@ def checkNextMonth(year, month):
     return outNextMonth
 
 
-def calc_Delta(year, month): #CHECKS OK
+def calc_Delta(year, month): #Debug QC Complete - 20191230 - KRS
     #Slope of the vapor pressure curve
     # t is AVERAGE air temperature in degrees C
     # Equation 13 in FAO doc (http://www.fao.org/docrep/X0490E/x0490e06.htm#TopOfPage)
@@ -2214,25 +2217,23 @@ def calc_Delta(year, month): #CHECKS OK
 ##    return D
 
 
-    dirPath_Name = tminDir + "\\*MonthlyAvg_" + str(year) + month + "*.nc"  'Directory Path and wildcard syntx for the srad NC File'
+    dirPath_Name = tminDir + "\\*monavg_" + str(year) + month + "*.tif"  #Directory Path and wildcard syntax
     tmin_NC = glob.glob(dirPath_Name)
 
     #Create the tmin array
     tmin_np = raster2array(tmin_NC[0])
 
-    dirPath_Name = tmaxDir + "\\*MonthlyAvg_" + str(year) + month + "*.nc"  'Directory Path and wildcard syntx for the srad NC File'
+    dirPath_Name = tmaxDir + "\\*monavg_" + str(year) + month + "*.tif"  #Directory Path and wildcard syntax
     tmax_NC = glob.glob(dirPath_Name)
 
     #Create the srad array
     tmax_np = raster2array(tmax_NC[0])
 
-
     #Calculate the average temp
     avgTemp_np = calc_avgTemp(tmin_np, tmax_np)
 
-
     #Calculate the (17.27*t)/(t+237.3)
-    ras17pt27_NP = raster2array(tmin)
+    ras17pt27_NP = raster2array(tmin_NC[0])
 
     #Create Raster with value 17.27 every where
     ras17pt27_NP[ras17pt27_NP > -999] = 17.27
@@ -2241,13 +2242,12 @@ def calc_Delta(year, month): #CHECKS OK
     deltaleft_NP = np.multiply(ras17pt27_NP, avgTemp_np)
     del ras17pt27_NP
 
-
+    ras237pt3_NP = raster2array(tmin_NC[0])
     #Create Raster with value 237.3 every where
     ras237pt3_NP[ras237pt3_NP > -999] = 237.3
 
     #(t+237.3)
-    deltaRight_NP = np.add(avgTemp, ras237pt3_NP)
-
+    deltaRight_NP = np.add(avgTemp_np, ras237pt3_NP)
 
     #(17.27*t)/(t+237.3)
     deltaBracket_NP = np.divide(deltaleft_NP, deltaRight_NP)
@@ -2257,7 +2257,7 @@ def calc_Delta(year, month): #CHECKS OK
     ######
     #Right Term (0.6108 * numpy.exp(bracket_term))
 
-    raspt6108_NP = raster2array(tmin)
+    raspt6108_NP = raster2array(tmin_NC[0])
 
     #Create Raster with value 0.6108 every where
     raspt6108_NP[raspt6108_NP > -999] = 0.6108
@@ -2274,7 +2274,7 @@ def calc_Delta(year, month): #CHECKS OK
     #######
     #Calculate top_term = 4098*right_term
 
-    ras4098_NP = raster2array(tmin)
+    ras4098_NP = raster2array(tmin_NC[0])
 
     #Create Raster with value 4098 every where
     ras4098_NP[ras4098_NP > -999] = 4098
@@ -2289,11 +2289,10 @@ def calc_Delta(year, month): #CHECKS OK
     #bottom_term = (t+237.3)**2
     ############
 
-    tempPlus237pt3_NP = np.add(avgTemp, ras237pt3_NP)
+    tempPlus237pt3_NP = np.add(avgTemp_np, ras237pt3_NP)
 
     del ras237pt3_NP
-    del avgTemp
-
+    del avgTemp_np
 
     bottom_term_NP = np.power(tempPlus237pt3_NP, 2)
 
@@ -2303,17 +2302,14 @@ def calc_Delta(year, month): #CHECKS OK
     #D = top_term/bottom_term
     #########################
 
-    delta_np = np.divide(topterm_NP,bottom_term_NP)
-
+    delta_NP = np.divide(topterm_NP,bottom_term_NP)
 
     outDelta = outDir + "\\Penman_Delta_" + str(year) + "_" + month + ".tif"
 
     #Export Array to a Raster
-    array2raster(monthlyTempMean[0],outDelta, delta_NP)
+    array2raster(tmin_NC[0],outDelta, delta_NP)
     messageTime = timeFun()
-    print ("Derived Penman Delta ( for year/month - " + str(year) + "_" + month + " - " + outSatVapPressure + " - " + messageTime)
-
-
+    print("Derived Penman Delta ( for year/month - " + str(year) + "_" + month + " - " + outDelta + " - " + messageTime)
 
     return outDelta
 
