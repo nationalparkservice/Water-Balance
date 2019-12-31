@@ -1852,16 +1852,14 @@ def Penman_topLeft(year, month):
         out_Delta_np = calc_Delta(year, month)
 
         #Derive Inverse Relative Distance - Using the mid Month Day value - Completed 2018/7/6
-        #Stopped Debug QC here 20191230- KRS
+        #Debug QC Completed 20191231
         inverse_rel_distance = calc_inverse_rel_distance(month)
 
+        #Derive sunset_hour_angle - Code Completed 2018/7/6; Debug QC Completed 20191231
+        sunset_hour_angle_NP = calc_sunset_hour_angle(latitude, month)
 
-        #Derive sunset_hour_angle
-        sunset_hour_angle_NP = calc_sunset_hour_angle(latitude,solar_declination, month) #- Completed 2018/7/6
-
-
-        #Derive  Ra: extra-terrestrial radiation in MJ/m2/day. Equation 21 of Ch3 FAO doc. - Completed 2018/7/6
-        Ra_NP = calc_Ra(inverse_rel_distance,sunset_hour_angle_NP,latitude,solar_declination)
+        #Derive  Ra: extra-terrestrial radiation in MJ/m2/day. Equation 21 of Ch3 FAO doc. - Completed 2018/7/6; Debug QC Completed 20191231
+        Ra_NP = calc_Ra(inverse_rel_distance,sunset_hour_angle_NP,latitude, month)
 
         #Derive N = Maximum Daylength - Completed 2018/7/6 - Not being used due to function CalcRS not being used - KRS
         #N_np = calc_daylength(sunset_hour_angle_NP)
@@ -1871,6 +1869,7 @@ def Penman_topLeft(year, month):
         #Rs_np =CalcRs(Ra_NP, year, month, N_np)
 
         #Function to convert the native Daymet sRad (W/m2) to (MJ/m2/day)
+        #Stopped COde Debugging here 20191231 - Different Cell Sizes
         Rs_np = calc_sRad_MJM2Day(month, year)
         ##############################
 
@@ -2210,7 +2209,7 @@ def calc_Delta(year, month): #Debug QC Complete - 20191230 - KRS
 ##    tmax = float(tmax);tmin=float(tmin)
 ##    t = (tmax + tmin)/2
 ##    bracket_term = (17.27*t)/(t+237.3)
-##    right_term = 0.6108 * numpy.exp(bracket_term)
+##    right_term = 0.6108 * np.exp(bracket_term)
 ##    top_term = 4098*right_term
 ##    bottom_term = (t+237.3)**2
 ##    D = top_term/bottom_term
@@ -2255,7 +2254,7 @@ def calc_Delta(year, month): #Debug QC Complete - 20191230 - KRS
     del deltaRight_NP
 
     ######
-    #Right Term (0.6108 * numpy.exp(bracket_term))
+    #Right Term (0.6108 * np.exp(bracket_term))
 
     raspt6108_NP = raster2array(tmin_NC[0])
 
@@ -2537,24 +2536,24 @@ def calc_G_nextMonthUnknown(year, month):
     return G_np
 
 
-def calc_Ra(inverse_rel_distance, sunset_hour_angle_NP, latitude, solar_declination): #Completed 20180706
+def calc_Ra(inverse_rel_distance, sunset_hour_angle_NP, latitude, month): #Completed 20180706
     #Ra = extra-terrestrial radiation in MJ/m2/day. Equation 21 of Ch3 FAO doc.
     # Latitude (j) in radians. Positive for northern hemisphere and negative for southern hemisphere.
     # Sunset hour angle (Ws) in radians. Solar declination (d) in radians.
 ##    Gsc = .0820 # Solar constant : MJ/m^2/day
 ##    first_term = (float((24*60))/pi) * Gsc #37.586
-##    first_half_bracket_term = (numpy.sin(latitude) * numpy.sin(solar_declination)) * sunset_hour_angle
-##    second_half_bracket_term = (numpy.cos(latitude) * numpy.cos(solar_declination) * numpy.sin(sunset_hour_angle))
+##    first_half_bracket_term = (np.sin(latitude) * np.sin(solar_declination)) * sunset_hour_angle
+##    second_half_bracket_term = (np.cos(latitude) * np.cos(solar_declination) * np.sin(sunset_hour_angle))
 ##    full_bracket_term = first_half_bracket_term + second_half_bracket_term
 ##    Ra = first_term * full_bracket_term * inverse_rel_distance
 ##    return Ra
 
     #Create Raster with value 0.0820 every where - Solar constant : MJ/m^2/day
-    gsc_NP =  netCDF4.Dataset(tmin)
+    gsc_NP = raster2array(latitude)
     gsc_NP[gsc_NP > -999] = 0.0820
 
     #Create Raster with value 1440 every where (i.e 24 * 60)
-    np1440zeropt0 = netCDF4.Dataset(tmin)
+    np1440zeropt0 = raster2array(latitude)
     np1440zeropt0[np1440zeropt0 > -999] = 1440.0
 
     #1440 / Pi
@@ -2563,77 +2562,77 @@ def calc_Ra(inverse_rel_distance, sunset_hour_angle_NP, latitude, solar_declinat
     del np1440zeropt0
 
     #Finish first term Calculation
-    Ra_FirstTerm_NP = np.multipy(np1440_divPI, gsc_NP)
+    Ra_FirstTerm_NP = np.multiply(np1440_divPI, gsc_NP)
 
     del np1440_divPI
     del gsc_NP
 
     ##################################
-    # first_half_bracket_term = (numpy.sin(latitude) * numpy.sin(solar_declination)) * sunset_hour_angle
-    latitude_NP = raster2array(Latitude)
+    # first_half_bracket_term = (np.sin(latitude) * np.sin(solar_declination)) * sunset_hour_angle
+    latitude_NP = raster2array(latitude)
 
     #Derive the Latitude in Radians
-    latitudeRadian_NP = numpy.radians(latitude_NP)
+    latitudeRadian_NP = np.radians(latitude_NP)
 
     #Derive the Latitude in Radians * Sin
-    latSin_NP = numpy.sin(latitudeRadian_NP)
+    latSin_NP = np.sin(latitudeRadian_NP)
 
     #Calculate the montly solar declination via the Penman Approach
     monthSolarDec = calc_solar_declination_Penman(month)
 
     #Create the Numpy raster Raster with the Monthly Solar Declinaton value
-    solarDec_Monthly_NP = netCDF4.Dataset(tmin)
+    solarDec_Monthly_NP = raster2array(latitude)
     solarDec_Monthly_NP[solarDec_Monthly_NP > -999] = monthSolarDec
 
     #Create the Numpy raster Raster with the Monthly Solar Declinaton value * Sin
-    solarDec_Sin_NP = numpy.sin(solarDec_Monthly_NP)
+    solarDec_Sin_NP = np.sin(solarDec_Monthly_NP)
 
-    #(numpy.sin(latitude) * numpy.sin(solar_declination))
+    #(np.sin(latitude) * np.sin(solar_declination))
     SinLat_SinSolarDec_NP = np.multiply(latSin_NP, solarDec_Sin_NP)
     del  solarDec_Sin_NP
 
     #Multiple the Sunset_hour_angle
-    firstHalfBracket_term_NP = numpy.multiply(SinLat_SinSolarDec_NP, sunset_hour_angle_NP)
+    firstHalfBracket_term_NP = np.multiply(SinLat_SinSolarDec_NP, sunset_hour_angle_NP)
     del SinLat_SinSolarDec_NP
     del latSin_NP
 
 
     ################
-    #Second Half Bracket Term - (numpy.cos(latitude) * numpy.cos(solar_declination) * numpy.sin(sunset_hour_angle))
+    #Second Half Bracket Term - (np.cos(latitude) * np.cos(solar_declination) * np.sin(sunset_hour_angle))
 
-    latCos_NP = numpy.sin(latitudeRadian_NP)
+    latCos_NP = np.sin(latitudeRadian_NP)
     del latitudeRadian_NP
 
 
     #Create the Numpy raster Raster with the Monthly Solar Declinaton value * cos
-    solarDec_Cos_NP = numpy.cos(solarDec_Monthly_NP)
+    solarDec_Cos_NP = np.cos(solarDec_Monthly_NP)
     del solarDec_Monthly_NP
 
     #Sin(Sunset_hour_angle)
-    sinSunSet_Hour_Angle_NP = numpy.Sin(sunset_hour_angle_NP)
+    sinSunSet_Hour_Angle_NP = np.sin(sunset_hour_angle_NP)
     del sunset_hour_angle_NP
 
     #Multiply the Cos(Latitude) * Cos(Solar_Declination)
-    cosLat_cosSolarDec_NP = numpy.multiply(solarDec_Cos_NP, sinSunSet_Hour_Angle_NP)
+    cosLat_cosSolarDec_NP = np.multiply(solarDec_Cos_NP, sinSunSet_Hour_Angle_NP)
     del solarDec_Cos_NP
     del sinSunSet_Hour_Angle_NP
 
     #Second Half Bracket Term
-    secondHalfBracket_term_NP = numpy.multiple(latCos_NP, cosLat_cosSolarDec_NP)
+    secondHalfBracket_term_NP = np.multiply(latCos_NP, cosLat_cosSolarDec_NP)
     del cosLat_cosSolarDec_NP
 
 
     ###Full Bracket Term
-    fullBracket_term_NP = numpy.add(firstHalfBracket_term_NP, secondHalfBracket_term_NP)
+    fullBracket_term_NP = np.add(firstHalfBracket_term_NP, secondHalfBracket_term_NP)
     del firstHalfBracket_term_NP
     del secondHalfBracket_term_NP
 
 
-    Ra_Left_Side_NP = numpy.multiply(Ra_FirstTerm_NP, fullBracket_term_NP)
+    Ra_Left_Side_NP = np.multiply(Ra_FirstTerm_NP, fullBracket_term_NP)
     del Ra_FirstTerm_NP
     del fullBracket_term_NP
 
-    Ra_NP = numpy.multiply(Ra_Left_Side_NP, inverse_rel_distance)
+    Ra_NP = np.multiply(Ra_Left_Side_NP, inverse_rel_distance)
     del Ra_Left_Side_NP
 
     return Ra_NP
@@ -2651,7 +2650,7 @@ def calc_Rnl(tmax,tmin,Ea,Rs_np,Ra_NP, year, month): #
 ##    tmax = tmax + 273.16;tmin = tmin + 273.16 # Convert to degrees Kelvin
 ##    tmax = tmax**4;tmin=tmin**4
 ##    left_bracket_term = (tmax+tmin)/2;left_bracket_term = left_bracket_term * .000000004903 # Stefan-Boltzmann constant
-##    middle_term = 0.34 - (.14 * numpy.sqrt(Ea))
+##    middle_term = 0.34 - (.14 * np.sqrt(Ea))
 ##    right_term = (1.35*relative_shortwave_radiation) - 0.35
 ##    Rnl = left_bracket_term * middle_term * right_term
 ##    return Rnl
@@ -2751,13 +2750,13 @@ def calc_Rnl(tmax,tmin,Ea,Rs_np,Ra_NP, year, month): #
 
 
     #Sqroot the VP kpa array
-    vp_kpa_sqrt_NP = numpy.sqrt(out_Kpa_NP)
+    vp_kpa_sqrt_NP = np.sqrt(out_Kpa_NP)
     del out_Kpa_NP
 
-    #(.14 * numpy.sqrt(Ea))
+    #(.14 * np.sqrt(Ea))
     middleRight_NP = np.multply(p14_np, vp_kpa_sqrt_NP)
 
-    #0.34 - (.14 * numpy.sqrt(Ea))
+    #0.34 - (.14 * np.sqrt(Ea))
     middleTerm_NP = np.subtract(p34_np, middleRight_NP)
 
     #Convert sRad to MJ/m2/day -  See url https://daac.ornl.gov/DAYMET/guides/Daymet_mosaics.html  for formula to convert Daily total radion (MJ/m2/day)
@@ -2796,22 +2795,23 @@ def calc_Rnl(tmax,tmin,Ea,Rs_np,Ra_NP, year, month): #
 
 #Function calculates the Daily total radiation (MJ/m2/day) using the following equation: ((srad (W/m2) * dayl (s/day)) / 1,000,000)
 def calc_sRad_MJM2Day(month, year):
-    dirPath_Name = sRad + "\\*MonthlyAvg_" + str(year) + month + "*.nc"  'Directory Path and wildcard syntx for the srad NC File'
+    #Directory Path and wildcard syntx for the srad tif file'
+    dirPath_Name = sRad + "\\*MonthlyAvg_" + str(year) + month + "*.tif"
     srad_NC = glob.glob(dirPath_Name)
 
     #Create the srad array
     srad_np = raster2array(srad_NC[0])
 
-
-    dirPath_Name = dayl + "\\*MonthlyAvg_" + str(year) + month + "*.nc"  'Directory Path and wildcard syntx for the dayl NC File'
+    #Directory Path and wildcard syntx for the dayl NC File'
+    dirPath_Name = dayl + "\\*MonthlyAvg_" + str(year) + month + "*.nc"
     dayl_NC = glob.glob(dirPath_Name)
 
     #Create the srad array
     dayl_np = raster2array(dayl_NC[0])
 
     #Create an 1,000,000 Array
-    Array_1Mill_np = raster2array(vp_NC[0])
-    Array_1Mill_np[Array_1000_np > -1000000] = 1000000.0
+    Array_1Mill_np = raster2array(dayl_NC[0])
+    Array_1Mill_np[Array_1Mill_np > -1000000] = 1000000.0
 
     #srad * dayl
     srad_dayl_np = np.multiply(srad_np, dayl_np)
@@ -2916,7 +2916,7 @@ def calc_saturation_vapor_pressure(temp_NP): #This is being used to derive the E
 
 
 ##    bracket_term = (17.27*t)/(t+237.3)
-##    right_term = numpy.exp(bracket_term)
+##    right_term = np.exp(bracket_term)
 ##    saturation_vapor_pressure = 0.6108 * right_term
 ##    return saturation_vapor_pressure #kPa
 
@@ -3363,11 +3363,11 @@ def calc_Rs(Ra_NP, year, month, N_np): # Equation 35 - Completed 20180706 - I be
     n_np = raster2array(daylength_NC[0])
 
     #Create float type array of the Daylength raster
-    n_np_float = numpy.float(n_np)
+    n_np_float = np.float(n_np)
     del n_np
 
     #Create float type array of maximum possible duration of sunshine
-    N_np_float = numpy.float(N_np)
+    N_np_float = np.float(N_np)
     del N_np
 
     # These default values were taken from FAO Ch3 page 23.
@@ -3385,7 +3385,7 @@ def calc_Rs(Ra_NP, year, month, N_np): # Equation 35 - Completed 20180706 - I be
     b_np = raster2array(daylength_NC)
     b_np[b_np > -999] = b
 
-    ratio_np = numpy.divide(n_np_float, N_np_float)
+    ratio_np = np.divide(n_np_float, N_np_float)
     del n_np_float
     del N_np_float
 
@@ -3397,7 +3397,7 @@ def calc_Rs(Ra_NP, year, month, N_np): # Equation 35 - Completed 20180706 - I be
     del leftBracket_np
 
     #Final Rs array'
-    Rs_np = numpy.Multiply(fullBracket_np, Ra_NP)
+    Rs_np = np.Multiply(fullBracket_np, Ra_NP)
     del fullBracket_np
     #del Ra_NP
 
@@ -3438,32 +3438,32 @@ def calc_Rso(elevation,Ra_np): #Completed 20180706
 def calc_solar_declination_Penman(month):
 ##    doy = float(doy)
 ##    bracket_term = (((2*pi)/365) * doy) - 1.39
-##    retval = .409 * numpy.sin(bracket_term)
+##    retval = .409 * np.sin(bracket_term)
 ##    return retval # radians
 
 
     doy = dayYearMidMonth(month)
-    bracket_term = (((2*numpy.pi)/365) * doy) - 1.39
-    retval = .409 * numpy.sin(bracket_term)
+    bracket_term = (((2*np.pi)/365) * doy) - 1.39
+    retval = .409 * np.sin(bracket_term)
     return retval
 
 def calc_daylength(sunset_hour_angle_NP): #equation 34 Maximu Daylight Hours
     #N = (24/pi)*sunset_hour_angle
 
-    leftSideVal = (24/numpy.pi)
-    N_np = numpy.multiply(sunset_hour_angle_NP,leftSideVal)
+    leftSideVal = (24/np.pi)
+    N_np = np.multiply(sunset_hour_angle_NP,leftSideVal)
     return N_np
 
 
 
-def calc_sunset_hour_angle(latitude,solar_declination): #
+def calc_sunset_hour_angle(latitude, month): #
     #Both Latitude and Solar Declination need to be in radians
 
     #Convert Latitude Raster to Numpy Array
     latitude_NP = raster2array(latitude)
 
     #Derive the Latitude in Radians
-    latitudeRadian_NP = numpy.radians(latitude_NP)
+    latitudeRadian_NP = np.radians(latitude_NP)
     del latitude_NP
 
     #############################
@@ -3475,20 +3475,20 @@ def calc_sunset_hour_angle(latitude,solar_declination): #
     solar_declination_NP[solar_declination_NP > -999] = out_Solar_Declination
     ############################
 
-    bracket_term = numpy.tan(latitudeRadian_NP) * -1 * numpy.tan(solar_declination_NP)
+    bracket_term = np.tan(latitudeRadian_NP) * -1 * np.tan(solar_declination_NP)
 
     del latitudeRadian_NP
     del solar_declination_NP
 
-    sunset_hour_angle_NP = numpy.arccos(bracket_term)
+    sunset_hour_angle_NP = np.arccos(bracket_term)
     return sunset_hour_angle_NP #radians
 def calc_inverse_rel_distance(month): #Using the Mid Month Day value due to monthly calculation in place of daily
 
     midMonthDay = dayYearMidMonth(month)
     doy = float(midMonthDay)
 
-    bracket_term = ((2*pi)/365) * doy
-    retval = (.033 * numpy.cos(bracket_term)) + 1
+    bracket_term = ((2*np.pi)/365) * doy
+    retval = (.033 * np.cos(bracket_term)) + 1
     return retval #radians
 
 def calc_Ea_with_humidity_data(tmax, tmin, RHmean):#Function is only used if their is humidity data - Daymet doesn't have humidity data- Not being used.
