@@ -1,9 +1,9 @@
 # ---------------------------------------------------------------------------
-# Last Edited: 20190114 - Stopped 4:30 Partial Migration to Python 3.x
+# Last Edited: 20200103 - KRS
 #
 # Anaconda Environment - PythonDemo
 # SpatialWaterBalance_Hamon_and_Penman_ET.py
-# Created on: 2018-xx-xx
+# Created on: 2020xxxx
 # Description:  Script runs a monthly water balance model following
 # logic defined in Lutz et. al 2010 and Dilts et. al 2015 Journal of Biogreography.
 # Logic has been added to run the monthly water balance calculations across mulitple consecutive years.
@@ -19,7 +19,6 @@
 #
 # Derived By: Kirk Sherrill (Data Manager/GIS Analyst - Inventory and Monitoring Division - NPS)
 # Script has been modified to process successive years of data (i.e. water balance across numerous years (e.g. 2000, 2001, 2002, ...)
-
 
 # Processing logic has been added to derive evapotransprition using either a 'Penman-Monteith' (Physically Based) or 'Hamon' (Emperically Based)
 # equations
@@ -46,6 +45,7 @@ tminDir = r'F:\Daymet\Conus\Monthly\tif\tmin\GRSA\10m'       ##Directory with th
 vpDir = r'F:\Daymet\Conus\Monthly\tif\vp\GRSA\10m'         ##Direcotry with the vapour pressure variables
 sRad = r'F:\Daymet\Conus\Monthly\tif\srad\GRSA\10m'          ##Direcotry with the Solar Radiation variables (note Daymet sRad unit is W/m2)
 dayl = r'F:\Daymet\Conus\Monthly\tif\dayl\GRSA\10m'          ##Directory with the Day Length variables
+sweDir = r''                                                ##Directory with the SWE variables
 
 heatLoadIndex = "Yes"       ##Switch ("Yes"|"No") defining if Heat Load Index (Topographic Factors Slope and Aspect) should be included in PET Calculation (See Eq 16 Dilts et. al. 2015 Biogeography)
 etEquation = "Penman-Monteith"  ##Switch ("Hamon"|"Penman-Monteith") defining if the Evapotranspiration Equation to be used.
@@ -148,7 +148,6 @@ def main():
                 #Derive the avgTemp dataset
                 monthlyTempMean = calc_avgTemp(tmin_np, tmax_np)
 
-
                 #Define the month precip
                 dirPath_Name = pptDir + "\\*Monttl_" + str(year) + month + "*.tif"  #Directory Path and wildcard syntx for the srad NC File'
                 ppt_NC = glob.glob(dirPath_Name)
@@ -164,11 +163,8 @@ def main():
                 snowFraction = out1[2]
                 outArraySize = out1[3]  #Define the output Array cell sizes based upon the input monthlyTempMean Raster
 
-
                 #Derive the Snow Melt, Snow Pack and Monthly Water Input
-                out2 = snowMeltSnowPackWaterMonthly(meltFactor, monthlyPrecip, snowFraction, rainFraction, month, monthCount, monthList, year)
-
-                waterInput = out2
+                snowMeltSnowPackWaterMonthly(meltFactor, monthlyPrecip, snowFraction, rainFraction, month, monthCount, monthList, year)
 
                 if deriveDayLengthRasters == "Yes" and year == startYear:  #Manually Dervied Day Average Day Length Rasters (only necessary the first year)
                     #Calculate the Solar Declination angle for the month - Logic I believe is correct 20150831 - KRS
@@ -206,7 +202,7 @@ def main():
                     avgDayLengthRas = monthlyDayLengthHr
                     monthSolarDec = "Null"
 
-                if heatLoadIndex == "Yes":  #Calculate PET using Heat Load Index (only necessary the first year)
+                if heatLoadIndex.lower() == "yes":  #Calculate PET using Heat Load Index (only necessary the first year)
 
                     #Derive Heat Load Index - Only necessary on first monthly loop
                     if rasterHeatLoad == "N/A" and monthCount == 1 and year == startYear:
@@ -222,24 +218,21 @@ def main():
                         outheatLoad = outDir + "\\HeatLoadIndex.tif"
                         heatLoadIndexRas = outheatLoad
 
-
                     ##########
                     #Calculate PET with Heat Index Included with 'Hamon' or 'Penman-Monteith' equations
                     ##########
 
                     if etEquation == "Hamon":
 
-                        out3 = petHeatLoad(avgDayLengthRas, monthSolarDec, monthlyTempMean, heatLoadIndexRas, month, year)
-                        PET = out3
+                        petHeatLoad(avgDayLengthRas, monthSolarDec, monthlyTempMean, heatLoadIndexRas, month, year)
 
                     elif etEquation == "Penman-Monteith":
 
                         #Derive the 'Penman-Monteith' ET
-                        out_Penman = Penman_Montieth(year, month)
+                        out_Penman_ET = Penman_Montieth(year, month)
 
-                        #Caluclate the PET with Penamn ET
-                        out3 = petHeatLoad(avgDayLengthRas, monthSolarDec, monthlyTempMean, heatLoadIndexRas, month, year)
-                        PET = out3
+                        #Caluclate the Penman ET with the Heat Load Correction (Penman ET * heatload
+                        petHeatLoad_wPenman(out_Penman_ET, heatLoadIndexRas)
 
                     else:
                         print ("No Evapotranspiration forumula was defined.  Exiting script now, define the 'etEquation' parameter before proceeding")
@@ -248,37 +241,23 @@ def main():
 
                 elif heatLoadIndex == "No":   #Not using Heat Index
 
-
                     ##########
                     #Calculate PET no Heat Index Included with 'Hamon' or 'Penman-Monteith' equations
                     ##########
 
-
                     if etEquation == "Hamon":
 
                         #Derive the Potential Evapotranspiration Equation 9 (Lutz et. al.)
-                        out3 = potEvapoTrans(avgDayLengthRas, monthSolarDec, latitude, monthlyTempMean, month, year)
-                        PET = out3
+                        potEvapoTrans(avgDayLengthRas, monthSolarDec, latitude, monthlyTempMean, month, year)
 
                     elif etEquation == "Penman-Monteith":
 
-
-                        #Need to derive the 'Penman-Monteith' ET first
-                        out_Penman = penman_Montieth()
-
-                        ##########################################
-                        #Need to derive the function to caluclate the PET with Penamn ET and NO HEAT Load...20180119
-
-
-                        #Derive the Potential Evapotranspiration Equation 9 (Lutz et. al.)
-                        out3 = potEvapoTrans(avgDayLengthRas, monthSolarDec, latitude, monthlyTempMean, month, year)
-                        PET = out3
+                        # Derive the 'Penman-Monteith' ET
+                        Penman_Montieth(year, month)
 
                     else:
                         print ("no Evapotranspiration forumula was defined.  Exiting script now, define the 'etEquation' parameter before proceeding")
                         exit()
-
-
 
                 ##Set Yearly value back after processing a month - KRS 20171228
                 if month not in ["10","11","12"]:
@@ -300,8 +279,8 @@ def main():
 
                 monthCount +=1
 
-
-            #After Creation of the Monthly Water Input and PET Raster - Derive Remaining Water Balance Variables - Soil Water Storage, AET, Water Balance
+            ##############################################################
+            #After Creation of the Monthly Water Input and PET Raster - Derive Water Balance Output Variables:
             ###########################################
             #Calculate the Initial Soil Water Balance - Equation 12, subsequent calculation will remove the fraction removed from Soil Water Storage (eg. 13) where PET < Water Input.
             ###########################################
@@ -331,23 +310,58 @@ def main():
                 monthCount += 1
 
 
-            ##########
-            #Below are Summary Functions that have not been developed - 20170226
-            ##########
+
+            ###################################
+            ################################### 20200130
+            #These Functions need to be defiend from 'WaterBalance_SingleYear_GDAL_Numpyt_Py3pt6_nNewVar_20190603
+            ###########################################
+            # Calculate Annual Water Deficit (CumlCWD Dilts et. al 2015) Sum of months in year(Potential Evapotranspiration Monthly - Actual Evapotranspiration Monthly)
+            ###########################################
+
+            outAnnualWaterDeficit = annualWaterDeficit(monthList)
 
             ###########################################
-            #Calculate Annual Water Deficit and AET (Summary across months) - Currently deriving an annual Water Deficit and Actual Evapotranspiration Value
-            #Function not Complete
+            # Calculate Water Supply = SnowMelt + Rain Input
             ###########################################
 
+            monthCount = 1
+            for month in monthList:
+                outwaterSupply = waterSupply(month)
+                monthCount += 1
 
-            #annualVariables = ["WaterDeficit", "AET"]
+            ###########################################
+            # Calculate Water Supply - AET.  Where AET > Water Supply value is set to Zero.  - New Function 20190603
+            ###########################################
+            monthCount = 1
+            for month in monthList:
+                outWSAET = WSAET(month)
+                monthCount += 1
 
-            #for var in annualVariables:
+            ###########################################
+            # Calculate Spring Water Supply - AET.  Where AET > Water Supply value is set to Zero.  - New Function 20190603
+            # Dervied by Summing the monthly Water Supply - AET for all spring months (March, April, May).  When Monthly AET > water supply, water supply value is set to zero.
+            # Output Raster - 'WS_AETSpr'
+            monthListSpring = ["03", "04", "05"]
+            outWsAETspr = WSAET_Spr(monthListSpring)
 
-                #rasterList = glob.glob(outDir + var)  #Get list of Rasters to be summed
-                #outAnnual = annualSum(var, rasterList, year)
+            ###########################################
+            # Calculate Monthly RunOff - Runoff is where WaterSupply is > AET and the Soil Water Holding Capacity is Exceeded (SWB + WaterSupply is > Soil Water Holding Capacity).
+            # (Water Supply - AET, where neg (i.e. AET great WaterSupply, set to zero)
+            # Output Raster - RunOff_{Month}
+            ###########################################
+            monthCount = 1
+            for month in monthList:
+                outRunOff = RunOff(month)
+                monthCount += 1
 
+            ###########################################
+            # Spring Monthly RunOff - Runoff is where WaterSupply is > AET and the Soil Water Holding Capacity is Exceeded (SWB + (WaterSupply - AET (i.e. WS_AET)) is > Soil Water Holding Capacity).
+            # (Water Supply - AET, where neg (i.e. AET greater WaterSupply, set to zero).  i.e. When the soil water bucket overflows, the water is lost as runoff.
+            # Monthly RunOff for months March, April, May are summed for 'SpringRunOff'
+            # Output Raster - 'RunOffSpr'
+            ############################################
+            monthListSpring = ["03", "04", "05"]
+            outWsAETspr = SpringRunOff(monthListSpring)
 
             #################
             #Clean up routine
@@ -413,9 +427,6 @@ def array2raster(rasterfn,newRasterfn,array):
     outRasterSRS.ImportFromWkt(raster.GetProjectionRef())
     outRaster.SetProjection(outRasterSRS.ExportToWkt())
     outband.FlushCache()
-
-
-
 
 #Fuction derives the Monthly Melt Factor, Rain and Snow Fractions Equations 1-5 Lutz et. al. Biogeography 2010 Appendix S1)
 def meltFactorRainSnow(monthlyTempMean, monthlyPrecip, month, year):
@@ -721,6 +732,36 @@ def potEvapoTrans(avgDayLengthRas, monthSolarDec, latitude, monthlyTempMean, mon
         traceback.print_exc(file=sys.stdout)
         sys.exit()
 
+#Function derives the PET Penman with the heat load correction (Penman PET * Heat Load Index)
+def petHeatLoad_wPenman(out_Penman_ET, heatLoadIndexRas):
+    try:
+
+        penman_ET_np = raster2array(out_Penman_ET)
+        outheatLoad_np = raster2array(heatLoadIndexRas)
+
+        petHeatLoad_wPenman_np = np.multiply(penman_ET_np, outheatLoad_np)
+
+        del penman_ET_np
+        del outheatLoad_np
+
+        #Export Penman ET with Heatload Array to Raster
+        petHeatLoad_wPenman = outDir + "\\PET_Penman_wHL_" + str(year) + "_" + str(month) + ".tif"
+        array2raster(soilAWS, petHeatLoad_wPenman, petHeatLoad_wPenman_np)
+
+        messageTime = timeFun()
+        print("Derived PET Penman with Heat Load for year month - " + str(year) + " - " + str(month) + " - " + petHeatLoad_wPenman + " - " + messageTime)
+
+        #Should we set to 0 where SWE is greater than zero? - Yes
+
+
+        return petHeatLoad_wPenman_np
+
+    except:
+        messageTime = timeFun()
+        print("Error on petHeatLoad_wPenman Function during month - " + month)
+        traceback.print_exc(file=sys.stdout)
+        sys.exit()
+
 
 #Function Derives the Potential Evapotranspiration Equation with inclusion of the Heat Load Index Equations(14 and 15) equation # 16 in Dilts et. al. Biogeography 2015 Appendix S1)
 def petHeatLoad(avgDayLengthRas, monthSolarDec, monthlyTempMean, rasterHeatLoad, month, year):
@@ -784,19 +825,10 @@ def petHeatLoad(avgDayLengthRas, monthSolarDec, monthlyTempMean, rasterHeatLoad,
         #Set no Data to NaN
         outPETRight_NP[outPETRight_NP < -10000] = np.NaN
 
-        #Turning off export of temporary workspace rasters post de-bugging
-##        outPETRight = workspace + "\\PET_HL_Right_" + str(month) + ".tif"
-##        #Export Array to a Raster
-##        array2raster(monthlyTempMean[0], outPETRight, outPETRight_NP)
-##        messageTime = timeFun()
-##        print ("Derived Potential Evapotranspiration with Heat Load included Right Side of Equation - " + month + " - " + outPETRight + " - " + messageTime)
-
-
         #################################
         # Derived Left Side of PET w Heat Load
         #################################
         left = 29.8 * numDays
-
 
         NP_29pt8xDays= raster2array(monthlyTempMean[0])
         #Create Raster with value 29.8 x Days
@@ -807,24 +839,11 @@ def petHeatLoad(avgDayLengthRas, monthSolarDec, monthlyTempMean, rasterHeatLoad,
         del NP_29pt8xDays
         potEvapTran_NP[potEvapTran_NP < -10000] = np.NaN
 
-        #Turning off export of temporary workspace rasters post de-bugging
-##        monthPotEvapTranNat = workspace + "\\PET_NatRes_" + str(month) + ".tif"
-##        array2raster(monthlyTempMean[0], monthPotEvapTranNat, potEvapTran_NP)
-##        messageTime = timeFun()
-##        print ("Derived Potential Evapotranspiration with Heat Load included for month- " + month + " - " + monthPotEvapTranNat + " - " + messageTime)
-
         #If PET values less than zero, set PET value to zero: Con(Raster(monthPotEvapTranNat) < 0, 0, Raster(monthPotEvapTranNat))
-
         potEvapTran_NP[potEvapTran_NP < 0] = 0
 
-        #Turning off export of temporary workspace rasters post de-bugging
-##        monthPETNoZero = workspace + "\\PET_NatRes_NoZero_" + str(month) + ".tif"
-##        array2raster(monthlyTempMean[0], monthPETNoZero, potEvapTran_NP)
-##        messageTime = timeFun()
-##        print ("PET values less than zero set to zero for month - " + month + " - " +  monthPETNoZero + " - " + messageTime)
-
         #Logic was added 20160701  - Con(Raster(monthlyTempMean[0]) < 0, 0, Raster(monthPETNoZero))
-        #Set PET to zero if the TMEAN is less than 0, no PET.  It would be easy to add a parameterized minimum temperature other than 0 above which PET occurs.
+        #Set PET to zero if the TMEAN is less than 0, no PET.  It would be easy to add a parameterized minimum temperature other than 0 above which PET occurs. (e.g. Jennings et. al. 2018).
 
         petAbove_NP = raster2array(monthlyTempMean[0])
 
@@ -935,7 +954,6 @@ def dayLengthRas(latitude, monthSolarDec, month):
             messageTime = timeFun()
             print ("Derived Latitude Radians Rasters - " + latRadians + " - " + messageTime)
 
-
         negMonthSolarDec = -1 * monthSolarDec   #Creating negative solar declination value
         outCalc1 = workspace + "\\DayLength_Calc1_" + month + ".tif"
         calc1 = (negMonthSolarDec * Tan(Raster(latRadians)))
@@ -948,7 +966,6 @@ def dayLengthRas(latitude, monthSolarDec, month):
         calc2.save(dayLength)
         messageTime = timeFun()
         print ("Completed Day Length Caluclation for - " + month + " - " + dayLength + " - " + messageTime)
-
 
         return dayLength
 
@@ -1056,7 +1073,6 @@ def soilWaterBalance(soilAWS, monthCount, month, monthList, year):
             previousMonth = "09"
             percMult = (percAWSInitial / 100.0)
 
-
             percMult_NP = raster2array(soilAWS)
             percMult_NP[percMult_NP > -10000] = percMult
 
@@ -1076,7 +1092,9 @@ def soilWaterBalance(soilAWS, monthCount, month, monthList, year):
 
             #For Month of October, caculating Soil Moisture using Water Input Sept, PET Sept, and for Soil Moisture previous month AWS at defined variable percAWSInitial
             waterInputRas = outDir + "\\WaterInput_" + str(year) + "_"+ month + ".tif"
-            petRas = outDir + "\\PET_" + str(year) + "_" + month + ".tif"
+            petRasSyntax = outDir + "\\PET_*" + str(year) + "_" + month + ".tif"
+            petRasList = glob.glob(petRasSyntax)
+            petRas = (petRasList[0])
             swbPrevious = initialAWSOut
             swbOut = outDir + "\\SWB_" + str(year) + "_" + month + ".tif"
 
@@ -1094,7 +1112,9 @@ def soilWaterBalance(soilAWS, monthCount, month, monthList, year):
 
             previousMonth = monthList[monthCount - 2]
             waterInputRas = outDir + "\\WaterInput_" + str(year) + "_" + month + ".tif"
-            petRas = outDir + "\\PET_" + str(year) + "_" + month + ".tif"
+            petRasSyntax = outDir + "\\PET_*" + str(year) + "_" + month + ".tif"
+            petRasList = glob.glob(petRasSyntax)
+            petRas = (petRasList[0])
             swbPrevious = outDir + "\\SWB_" + str(year) + "_" + previousMonth + ".tif"
             swbOut = outDir + "\\SWB_" + str(year) + "_" + month + ".tif"
 
@@ -1115,7 +1135,9 @@ def soilWaterBalance(soilAWS, monthCount, month, monthList, year):
 
             previousMonth = monthList[monthCount - 2]
             waterInputRas = outDir + "\\WaterInput_" + str(year) + "_" + month + ".tif"
-            petRas = outDir + "\\PET_" + str(year) + "_" + month + ".tif"
+            petRasSyntax = outDir + "\\PET_*" + str(year) + "_" + month + ".tif"
+            petRasList = glob.glob(petRasSyntax)
+            petRas = (petRasList[0])
 
             if month == "01":
                 swbPrevious = outDir + "\\SWB_" + str(year - 1) + "_" + previousMonth + ".tif"
@@ -1595,7 +1617,9 @@ def soilWaterStorageRemoved(month, monthCount, monthList, year):
                 swbPrevious = outDir + "\\SWB_" + str(year) + "_" + str(previousMonth) + ".tif"
 
 
-        pet = outDir + "\\PET_" + str(year) + "_" + str(month) + ".tif"
+        petRasSyntax = outDir + "\\PET_*" + str(year) + "_" + str(month) + ".tif"
+        petRasList = glob.glob(petRasSyntax)
+        pet = (petRasList[0])
 
         waterInput = outDir + "\\WaterInput_" + str(year) + "_" + str(month) + ".tif"
 
@@ -1625,7 +1649,6 @@ def soilWaterStorageRemoved(month, monthCount, monthList, year):
 ##        messageTime = timeFun()
 ##        print ("Derived Right Side Soil Water Storage Removed - " + month + " - " +  outRightSWSR + " - " + messageTime)
 
-
         #Equation 13 Final Calc: (1 - Exp(outRightSWSR)) * Raster(swbPrevious)
         exp_OutRightSWSR_NP = np.exp(outRightSWSR_NP)
         del outRightSWSR2_NP
@@ -1647,7 +1670,6 @@ def soilWaterStorageRemoved(month, monthCount, monthList, year):
         del outRemovedSWS_NP
         messageTime = timeFun()
         print ("Derived Soil Water Storage removed for month - " + month + " - " +  outRemovedSWS + " - " + messageTime)
-
 
         ##Set Yearly value back after processing a month - KRS 20171228
         if month not in ["10","11","12"]:
@@ -1672,8 +1694,9 @@ def actualEvapoTrans(month, year):
         if month not in ["10","11","12"]:
             year = year + 1
 
-
-        pet = outDir + "\\PET_" + str(year) + "_" + str(month) + ".tif"
+        petRasSyntax = outDir + "\\PET_*" + str(year) + "_" + str(month) + ".tif"
+        petRasList = glob.glob(petRasSyntax)
+        pet = (petRasList[0])
 
         sws_rem = outDir + "\\SWS_To_Remove_PET_gt_Wm_" + str(year) + "_" + str(month) + ".tif"
         waterInput = outDir + "\\WaterInput_" + str(year) + "_" + str(month) + ".tif"
@@ -1721,7 +1744,6 @@ def actualEvapoTrans(month, year):
         if month not in ["10","11","12"]:
             year = year - 1
 
-
         #############
         #Clean up routine
         #################
@@ -1753,7 +1775,10 @@ def waterDeficit(month, year):
             year = year + 1
 
 
-        pet = outDir + "\\PET_" + str(year) + "_" + str(month) + ".tif"
+        petRasSyntax = outDir + "\\PET_*" + str(year) + "_" + str(month) + ".tif"
+        petRasList = glob.glob(petRasSyntax)
+        pet = (petRasList[0])
+
         aet = outDir + "\\AET_" + str(year) + "_" + str(month) + ".tif"
 
         pet_NP = raster2array(pet)
@@ -1786,7 +1811,6 @@ def waterDeficit(month, year):
 def Penman_Montieth(year, month):
 
     try:
-
         #Top Left Term of FAO Penman-Monteith (0.408 Delta(Rn-G))
         #QC Code Debug Complete 20190103 KRS
         Penman_topLeft_np = Penman_topLeft(year, month)
@@ -1809,32 +1833,47 @@ def Penman_Montieth(year, month):
         #QC Code Debug Complete 20190103 KRS
         Penman_topTerm_np = Penman_topTerm(Penman_topLeft_np, Penman_topMiddle_np, Penman_topRight_np)
         messageTime = timeFun()
-        print ("Successfully finished function 'Penman_topTerm' - " + " - " + messageTime)
+        print("Successfully finished function 'Penman_topTerm' - " + " - " + messageTime)
 
         #Derive the Penman Bottom Right Term: gamma *(1 + wind_correction)
         #QC Code Debug Complete 20190103 KRS
         penman_bottomRightTerm_np = Penman_bottomRightTerm()
         messageTime = timeFun()
-        print ("Successfully finished function 'Penman_bottomRightTerm' - " + " - " + messageTime)
+        print("Successfully finished function 'Penman_bottomRightTerm' - " + " - " + messageTime)
 
         #Derive overall Bottom term delta + gamma *(1 + wind_correction)
         #QC Code Debug Complete 20190103 KRS
         penman_bottomTerm_np = Penman_bottomTerm(year, month, penman_bottomRightTerm_np)
         messageTime = timeFun()
-        print ("Successfully finished function 'Penman_bottomTerm' - " + " - " + messageTime)
+        print("Successfully finished function 'Penman_bottomTerm' - " + " - " + messageTime)
 
         #Derive overall Penman-Monteith ET Equation:  (Penman_topTerm_np/penman_bottomTerm_np)
+        #QC Code Debug Complete 20190103 KRS
         penman_Eto_np = Penman_FullTerm(Penman_topTerm_np, penman_bottomTerm_np)
         messageTime = timeFun()
-        print ("Successfully finished function 'Penman_FullTerm' - " + " - " + messageTime)
+        print("Successfully finished function 'Penman_FullTerm' - " + " - " + messageTime)
+
+        ############################################################
+        #If SWE is Greater than zero no Potential Evapotranspiration  - Code need to be QC'd post create of SWE datasets 20200103 - KRS
+        ############################################################
+        dirPath_Name = sweDir + "\\*monavg_" + str(year) + month + "*.tif"  # Directory Path and wildcard syntax
+        swe_NC = glob.glob(dirPath_Name)
+
+        # Create the SWE array
+        swe_np = raster2array(swe_NC[0])
+        #Where SWE >0, set to 0, else Penman ET
+        penman_Eto_np_swe = np.where(swe_np > 0, 0, penman_Eto_np)
 
         #Export the Penman-Monteith Eto Array
-        outPenmanEto = outDir + "\\Penman_Eto_" + str(year) + "_" + month + ".tif"
+        if heatLoadIndex.lower() == "yes": #This will be a workspace PET raster'
+            outPenmanEto = workspace + "\\PET_Penman_" + str(year) + "_" + month + ".tif"
+        else:
+            outPenmanEto = outDir + "\\PET_Penman_" + str(year) + "_" + month + ".tif"
 
-        #Export penman_Eto_np Array to a Raster
-        array2raster(soilAWS,outPenmanEto, penman_Eto_np)
+        #Export penman_Eto_np with SWE >0 set to 0 Array to a Raster
+        array2raster(soilAWS,outPenmanEto, penman_Eto_np_swe)
         messageTime = timeFun()
-        print ("Derived Penman Eto (for year/month - " + str(year) + "_" + month + " - " + outPenmanEto + " - " + messageTime)
+        print("Derived Penman Eto with SWE correction (i.e. >0 set to zero) for year/month - " + str(year) + "_" + month + " - " + outPenmanEto + " - " + messageTime)
 
         return outPenmanEto
 
@@ -1843,7 +1882,6 @@ def Penman_Montieth(year, month):
         print ("Error Penman_Montieth function - " + messageTime)
         traceback.print_exc(file=sys.stdout)
         sys.exit()
-
 
 
 #Top Left Term of FAO Penman-Monteith (0.408 Delta(Rn-G) - Initial Development finished 2018/07/23 - KRS
@@ -2309,7 +2347,6 @@ def calc_Delta(year, month): #Debug QC Complete - 20191230 - KRS
     #########################
 
     delta_NP = np.divide(topterm_NP,bottom_term_NP)
-
     outDelta = outDir + "\\Penman_Delta_" + str(year) + "_" + month + ".tif"
 
     #Export Array to a Raster
