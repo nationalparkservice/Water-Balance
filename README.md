@@ -1,6 +1,6 @@
 # Python Based Monthly Water-Balance Scripts
 
-Python code for deriving gridded monthly water balance products following logic defined in Lutz et. al 2010 and Dilts et. al 2015 Journal of Biogreography articles. Script has been modified to process successive years of data (i.e. water balance across numerous years (e.g. 2000, 2001, 2002, ...).  There is the option to derive water balance using  either using a 'Penman-Monteith' (Physically Based) or 'Hamon' (Emperically Based) evapotranspiration calculations.
+Python code for deriving gridded monthly water balance products following logic defined in Lutz et. al 2010 and Dilts et. al 2015 Journal of Biogreography articles. Script has been modified to process successive years of data (e.g. 2000, 2001, 2002, ...).  There is the option to derive water balance using  either using a 'Penman-Monteith' (Physically Based) or 'Hamon' (Emperically Based) evapotranspiration calculations.
 
 Scripts derived By: Kirk Sherrill (Data Manager, Rocky Mountain Network, Inventory and Monitoring Division, NPS
 
