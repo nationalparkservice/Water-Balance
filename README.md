@@ -1,4 +1,4 @@
-# Python Based Monthly Water-Balance Scripts
+# Python GIS Desktop Monthly Water-Balance Scripts
 
 Python code for deriving gridded monthly water balance products following logic defined in Lutz et. al 2010 and Dilts et. al 2015 Journal of Biogreography articles. Script has been modified to process successive years of data (e.g. 2000, 2001, 2002, ...).  There is the option to derive water balance using  either using a 'Penman-Monteith' (Physically Based) or 'Hamon' (Emperically Based) evapotranspiration calculations.
 
